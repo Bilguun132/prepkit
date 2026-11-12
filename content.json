@@ -146,6 +146,195 @@
           "body": "Use UTC timestamps, define recurrence and daylight-saving semantics, spread bursts with jitter, and track scheduling lag, retries, duplicate claims, and worker saturation."
         }
       ]
+    },
+    "chat-messaging": {
+      "intro": "A strong answer follows a repeatable path: clarify the goal, make the data and interfaces concrete, draw the main request flow, then deepen the riskiest parts and explain tradeoffs.",
+      "sections": [
+        {
+          "title": "Requirements and API",
+          "body": "Clarify delivery semantics, group sizes, ordering, retention, and online presence. Define APIs for sending messages, syncing history, and acknowledging delivery."
+        },
+        {
+          "title": "Core architecture",
+          "body": "A gateway authenticates clients and maintains WebSocket sessions. A message service validates membership and writes each message to a partitioned durable log keyed by conversation. Fanout workers deliver to connected members and enqueue offline notifications. Conversation history is stored in sharded databases; per-device cursors let clients sync missed messages. Use message IDs for idempotent retries, order within a conversation partition, and make delivery at-least-once with client deduplication. Presence can be approximate and kept in a short-TTL cache."
+        },
+        {
+          "title": "Data, scale, and tradeoffs",
+          "body": "Model conversations, memberships, messages, and per-device cursors. Use persistent connections to gateways, a durable message log, and fanout workers."
+        },
+        {
+          "title": "Reliability and operations",
+          "body": "Discuss ordering per conversation, retries, idempotency, offline queues, and regional failover. Call out the main latency, availability, correctness, and cost tradeoffs; instrument the system and plan gradual capacity changes."
+        }
+      ]
+    },
+    "video-streaming": {
+      "intro": "A strong answer follows a repeatable path: clarify the goal, make the data and interfaces concrete, draw the main request flow, then deepen the riskiest parts and explain tradeoffs.",
+      "sections": [
+        {
+          "title": "Requirements and API",
+          "body": "Clarify upload size, playback startup target, peak viewers, and content privacy. Separate the control plane (metadata) from the media data plane."
+        },
+        {
+          "title": "Core architecture",
+          "body": "Clients request an upload session from the API and upload chunks directly to object storage. An event triggers a durable processing queue; workers validate, transcode, and package videos into adaptive bitrate segments. Metadata and processing state live in a database. Playback APIs return a manifest and signed CDN URLs. A CDN serves cached segments near viewers, while origin storage remains durable. Make transcoding idempotent by video and rendition, retry failed jobs, and expose processing state to creators."
+        },
+        {
+          "title": "Data, scale, and tradeoffs",
+          "body": "Upload directly to object storage with resumable multipart sessions. Transcode asynchronously into adaptive bitrate segments and publish when ready."
+        },
+        {
+          "title": "Reliability and operations",
+          "body": "Deliver segments through a CDN; cover access control, hot content, and processing retries. Call out the main latency, availability, correctness, and cost tradeoffs; instrument the system and plan gradual capacity changes."
+        }
+      ]
+    },
+    "ride-sharing": {
+      "intro": "A strong answer follows a repeatable path: clarify the goal, make the data and interfaces concrete, draw the main request flow, then deepen the riskiest parts and explain tradeoffs.",
+      "sections": [
+        {
+          "title": "Requirements and API",
+          "body": "Clarify launch geography, location freshness, matching latency, and dispatch fairness. Define rider request and driver availability APIs plus trip state transitions."
+        },
+        {
+          "title": "Core architecture",
+          "body": "Drivers send periodic location updates to a location service that stores short-lived positions partitioned by geo cell. A rider request enters a matching service, which searches neighboring cells, filters by availability and vehicle constraints, and sends a time-limited offer. A trip service owns the authoritative state machine from requested to accepted, picked-up, completed, or cancelled. Use idempotency keys for requests and payments; tolerate slightly stale locations but prevent double assignment with conditional state transitions."
+        },
+        {
+          "title": "Data, scale, and tradeoffs",
+          "body": "Partition driver locations by geographic cells and expire stale positions. Search nearby cells, rank eligible drivers, and use an atomic offer/accept flow."
+        },
+        {
+          "title": "Reliability and operations",
+          "body": "Discuss surge, duplicate requests, trip updates, payment idempotency, and safety. Call out the main latency, availability, correctness, and cost tradeoffs; instrument the system and plan gradual capacity changes."
+        }
+      ]
+    },
+    "search-autocomplete": {
+      "intro": "A strong answer follows a repeatable path: clarify the goal, make the data and interfaces concrete, draw the main request flow, then deepen the riskiest parts and explain tradeoffs.",
+      "sections": [
+        {
+          "title": "Requirements and API",
+          "body": "Clarify latency, languages, freshness, personalization, and privacy requirements. Build a prefix index from normalized query and document signals."
+        },
+        {
+          "title": "Core architecture",
+          "body": "A client calls a regional suggestion API after a short debounce. The serving tier checks a cache keyed by normalized prefix and locale, then queries a compact prefix index when needed. Offline jobs aggregate permitted query events into top suggestions and publish versioned index snapshots. Personalization re-ranks a small candidate set using user context. Apply minimum aggregation thresholds and retention controls to protect privacy; publish index versions atomically and monitor p95 latency and suggestion quality."
+        },
+        {
+          "title": "Data, scale, and tradeoffs",
+          "body": "Precompute top suggestions for common prefixes; use a trie or finite-state index. Serve from a regional cache and rank candidates by popularity and context."
+        },
+        {
+          "title": "Reliability and operations",
+          "body": "Stream anonymized usage events into offline aggregation and index refresh. Call out the main latency, availability, correctness, and cost tradeoffs; instrument the system and plan gradual capacity changes."
+        }
+      ]
+    },
+    "cloud-drive": {
+      "intro": "A strong answer follows a repeatable path: clarify the goal, make the data and interfaces concrete, draw the main request flow, then deepen the riskiest parts and explain tradeoffs.",
+      "sections": [
+        {
+          "title": "Requirements and API",
+          "body": "Clarify file size, sync guarantees, sharing permissions, and version retention. Separate file metadata and permissions from binary blob storage."
+        },
+        {
+          "title": "Core architecture",
+          "body": "The API service authenticates requests and checks file and folder ACLs. Metadata, versions, and change cursors live in a transactional metadata store; file bytes are uploaded in chunks directly to object storage. A change log drives sync notifications, while clients fetch missed changes by cursor. Downloads use short-lived signed URLs and a CDN where policy permits. Keep versions immutable, make upload completion idempotent, and use tombstones so deletes propagate across devices."
+        },
+        {
+          "title": "Data, scale, and tradeoffs",
+          "body": "Use resumable chunked upload and content hashes for integrity/deduplication. Propagate change events to sync clients with cursors and notification channels."
+        },
+        {
+          "title": "Reliability and operations",
+          "body": "Discuss ACL checks, versioning, deletion recovery, and CDN delivery. Call out the main latency, availability, correctness, and cost tradeoffs; instrument the system and plan gradual capacity changes."
+        }
+      ]
+    },
+    "web-crawler": {
+      "intro": "A strong answer follows a repeatable path: clarify the goal, make the data and interfaces concrete, draw the main request flow, then deepen the riskiest parts and explain tradeoffs.",
+      "sections": [
+        {
+          "title": "Requirements and API",
+          "body": "Clarify crawl freshness, supported content, politeness, and indexing scope. Maintain a deduplicated frontier partitioned by host and priority."
+        },
+        {
+          "title": "Core architecture",
+          "body": "A URL frontier deduplicates normalized URLs and schedules fetches by host, priority, and next-eligible time. Workers lease batches, honor robots rules and per-host concurrency limits, then fetch with strict time and size limits. Parsing extracts links and content into durable queues. URL and content fingerprints prevent repeated work. Indexing is a downstream pipeline. Use leases for crash recovery, exponential backoff for failures, and metrics for frontier age, host errors, and duplicate rates."
+        },
+        {
+          "title": "Data, scale, and tradeoffs",
+          "body": "Fetch through workers with per-host rate limits and robots policy checks. Normalize URLs, fingerprint content, and schedule recrawls by change likelihood."
+        },
+        {
+          "title": "Reliability and operations",
+          "body": "Discuss retries, traps, malicious content, and pipeline observability. Call out the main latency, availability, correctness, and cost tradeoffs; instrument the system and plan gradual capacity changes."
+        }
+      ]
+    },
+    "collaborative-editor": {
+      "intro": "A strong answer follows a repeatable path: clarify the goal, make the data and interfaces concrete, draw the main request flow, then deepen the riskiest parts and explain tradeoffs.",
+      "sections": [
+        {
+          "title": "Requirements and API",
+          "body": "Clarify document size, concurrent editors, offline behavior, and conflict expectations. Choose an operation transformation or CRDT approach and define its tradeoffs."
+        },
+        {
+          "title": "Core architecture",
+          "body": "Clients submit edits with stable operation IDs and causal/version context to a document collaboration service. A room coordinator orders or merges operations using the chosen OT/CRDT model and broadcasts accepted updates. Durable operation logs support replay; periodic snapshots bound recovery time. Clients reconnect with a cursor and request missing operations. Presence is ephemeral and separate from durable content. Enforce document ACLs at join and operation time, and rate-limit abusive clients."
+        },
+        {
+          "title": "Data, scale, and tradeoffs",
+          "body": "Persist an ordered operation log and periodically compact snapshots. Broadcast updates over persistent connections and authorize document membership."
+        },
+        {
+          "title": "Reliability and operations",
+          "body": "Handle reconnect cursors, duplicate operations, presence, and version history. Call out the main latency, availability, correctness, and cost tradeoffs; instrument the system and plan gradual capacity changes."
+        }
+      ]
+    },
+    "distributed-cache": {
+      "intro": "A strong answer follows a repeatable path: clarify the goal, make the data and interfaces concrete, draw the main request flow, then deepen the riskiest parts and explain tradeoffs.",
+      "sections": [
+        {
+          "title": "Requirements and API",
+          "body": "Clarify cacheable data, consistency, eviction, TTL, and acceptable stale reads. Choose key partitioning and replication strategy."
+        },
+        {
+          "title": "Core architecture",
+          "body": "Clients reach a cache proxy that maps keys to shards using a consistent hash ring. Each shard keeps data in memory with TTL and an eviction policy; replication depends on durability and latency needs. On misses, a bounded origin loader applies request coalescing and circuit breakers to avoid stampedes. Versioned keys or explicit invalidation handle updates. During shard loss, rebalance gradually and protect the source database with quotas and fallback caching."
+        },
+        {
+          "title": "Data, scale, and tradeoffs",
+          "body": "Define get/set/invalidate behavior and protect against cache stampedes. Plan memory eviction, hot-key mitigation, and rolling resharding."
+        },
+        {
+          "title": "Reliability and operations",
+          "body": "Discuss cache outage fallback, overload protection, and hit-rate observability. Call out the main latency, availability, correctness, and cost tradeoffs; instrument the system and plan gradual capacity changes."
+        }
+      ]
+    },
+    "event-ticketing": {
+      "intro": "A strong answer follows a repeatable path: clarify the goal, make the data and interfaces concrete, draw the main request flow, then deepen the riskiest parts and explain tradeoffs.",
+      "sections": [
+        {
+          "title": "Requirements and API",
+          "body": "Clarify inventory guarantees, queue fairness, payment timing, and cancellation policy. Separate browsing and search from authoritative inventory reservation."
+        },
+        {
+          "title": "Core architecture",
+          "body": "Search and event pages are served from caches, but checkout goes through a queue that admits a controlled number of buyers. An inventory service performs atomic seat holds with short expirations and unique reservation IDs. Payment is handled asynchronously through an idempotent workflow; confirmed payment converts the hold into a ticket, while timeout or failure releases it. A reconciliation process handles late payment callbacks. Maintain a single authoritative seat state and measure queue wait, hold expiry, oversell attempts, and payment outcomes."
+        },
+        {
+          "title": "Data, scale, and tradeoffs",
+          "body": "Use a virtual waiting room to control admission and shed overload. Reserve inventory with atomic holds and expiry before payment confirmation."
+        },
+        {
+          "title": "Reliability and operations",
+          "body": "Discuss idempotency, fraud, retries, and reconciliation of payment and inventory. Call out the main latency, availability, correctness, and cost tradeoffs; instrument the system and plan gradual capacity changes."
+        }
+      ]
     }
   },
   "systems": [
@@ -238,6 +427,132 @@
         "Discuss sharding, safely claiming jobs, and worker coordination.",
         "Cover retries, dead letters, fairness, and hot partitions.",
         "Address clock issues, observability, and operational recovery."
+      ]
+    },
+    {
+      "id": "chat-messaging",
+      "title": "Design a real-time chat service",
+      "topic": "Messaging",
+      "tag": "System design",
+      "scenario": "Design one-to-one and group messaging for 100M users, including offline delivery and multi-device sync.",
+      "guide": [
+        "Clarify delivery semantics, group sizes, ordering, retention, and online presence.",
+        "Define APIs for sending messages, syncing history, and acknowledging delivery.",
+        "Model conversations, memberships, messages, and per-device cursors.",
+        "Use persistent connections to gateways, a durable message log, and fanout workers.",
+        "Discuss ordering per conversation, retries, idempotency, offline queues, and regional failover."
+      ]
+    },
+    {
+      "id": "video-streaming",
+      "title": "Design a video streaming platform",
+      "topic": "Media systems",
+      "tag": "System design",
+      "scenario": "Design a platform where creators upload videos and viewers stream them globally at multiple resolutions.",
+      "guide": [
+        "Clarify upload size, playback startup target, peak viewers, and content privacy.",
+        "Separate the control plane (metadata) from the media data plane.",
+        "Upload directly to object storage with resumable multipart sessions.",
+        "Transcode asynchronously into adaptive bitrate segments and publish when ready.",
+        "Deliver segments through a CDN; cover access control, hot content, and processing retries."
+      ]
+    },
+    {
+      "id": "ride-sharing",
+      "title": "Design a ride-sharing service",
+      "topic": "Location and matching",
+      "tag": "System design",
+      "scenario": "Design rider-driver matching with live locations, trip state, pricing, and payments.",
+      "guide": [
+        "Clarify launch geography, location freshness, matching latency, and dispatch fairness.",
+        "Define rider request and driver availability APIs plus trip state transitions.",
+        "Partition driver locations by geographic cells and expire stale positions.",
+        "Search nearby cells, rank eligible drivers, and use an atomic offer/accept flow.",
+        "Discuss surge, duplicate requests, trip updates, payment idempotency, and safety."
+      ]
+    },
+    {
+      "id": "search-autocomplete",
+      "title": "Design search autocomplete",
+      "topic": "Search",
+      "tag": "System design",
+      "scenario": "Design low-latency query suggestions that update as users type and support popular and personalized results.",
+      "guide": [
+        "Clarify latency, languages, freshness, personalization, and privacy requirements.",
+        "Build a prefix index from normalized query and document signals.",
+        "Precompute top suggestions for common prefixes; use a trie or finite-state index.",
+        "Serve from a regional cache and rank candidates by popularity and context.",
+        "Stream anonymized usage events into offline aggregation and index refresh."
+      ]
+    },
+    {
+      "id": "cloud-drive",
+      "title": "Design a cloud file storage service",
+      "topic": "Storage",
+      "tag": "System design",
+      "scenario": "Design a drive for file upload, sync, sharing, version history, and global downloads.",
+      "guide": [
+        "Clarify file size, sync guarantees, sharing permissions, and version retention.",
+        "Separate file metadata and permissions from binary blob storage.",
+        "Use resumable chunked upload and content hashes for integrity/deduplication.",
+        "Propagate change events to sync clients with cursors and notification channels.",
+        "Discuss ACL checks, versioning, deletion recovery, and CDN delivery."
+      ]
+    },
+    {
+      "id": "web-crawler",
+      "title": "Design a web crawler",
+      "topic": "Data ingestion",
+      "tag": "System design",
+      "scenario": "Design a polite crawler that discovers and indexes billions of pages while avoiding duplicate work.",
+      "guide": [
+        "Clarify crawl freshness, supported content, politeness, and indexing scope.",
+        "Maintain a deduplicated frontier partitioned by host and priority.",
+        "Fetch through workers with per-host rate limits and robots policy checks.",
+        "Normalize URLs, fingerprint content, and schedule recrawls by change likelihood.",
+        "Discuss retries, traps, malicious content, and pipeline observability."
+      ]
+    },
+    {
+      "id": "collaborative-editor",
+      "title": "Design a collaborative document editor",
+      "topic": "Collaboration",
+      "tag": "System design",
+      "scenario": "Design a document editor with real-time multi-user editing, comments, and offline reconnection.",
+      "guide": [
+        "Clarify document size, concurrent editors, offline behavior, and conflict expectations.",
+        "Choose an operation transformation or CRDT approach and define its tradeoffs.",
+        "Persist an ordered operation log and periodically compact snapshots.",
+        "Broadcast updates over persistent connections and authorize document membership.",
+        "Handle reconnect cursors, duplicate operations, presence, and version history."
+      ]
+    },
+    {
+      "id": "distributed-cache",
+      "title": "Design a distributed cache",
+      "topic": "Infrastructure",
+      "tag": "System design",
+      "scenario": "Design a cache tier for high read throughput, bounded latency, and predictable behavior during failures.",
+      "guide": [
+        "Clarify cacheable data, consistency, eviction, TTL, and acceptable stale reads.",
+        "Choose key partitioning and replication strategy.",
+        "Define get/set/invalidate behavior and protect against cache stampedes.",
+        "Plan memory eviction, hot-key mitigation, and rolling resharding.",
+        "Discuss cache outage fallback, overload protection, and hit-rate observability."
+      ]
+    },
+    {
+      "id": "event-ticketing",
+      "title": "Design an event ticketing platform",
+      "topic": "High contention",
+      "tag": "System design",
+      "scenario": "Design ticket discovery and checkout for a major event where demand spikes far above available inventory.",
+      "guide": [
+        "Clarify inventory guarantees, queue fairness, payment timing, and cancellation policy.",
+        "Separate browsing and search from authoritative inventory reservation.",
+        "Use a virtual waiting room to control admission and shed overload.",
+        "Reserve inventory with atomic holds and expiry before payment confirmation.",
+        "Discuss idempotency, fraud, retries, and reconciliation of payment and inventory."
       ]
     }
   ],

@@ -10,7 +10,7 @@ From this folder, start a small local server:
 python3 -m http.server 4173
 ```
 
-Then open <http://localhost:4173>. The app uses `content.json` as its local practice-content source. Progress, code drafts, and system design notes stay in this browser's local storage.
+Then open <http://localhost:4173>. The app uses `topics.json` and `content.json` as local practice-content sources. Progress and system design notes stay in this browser's local storage.
 
 The algorithm lesson and its visual walkthroughs are local. Coding problems open on LeetCode, where you can practice in your preferred language and use its judge.
 
@@ -18,4 +18,4 @@ System design questions include a discussion guide and a **Show a strong example
 
 ## Update the practice content
 
-Edit `topics.json` to add daily algorithm topics, concepts, sample questions, LeetCode links, and per-question visual steps. Edit `content.json` for system design prompts and trend briefings. The scheduled refresh updates the local topic data without changing the UI code.
+Edit `topics.json` to add daily algorithm topics, concepts, sample questions, LeetCode links, and per-question visual steps. Edit `content.json` for system design prompts and trend briefings. The daily scheduled refresh appends one new algorithm topic to `topics.json` and one system design scenario plus worked example to `content.json`. The newest entries become the daily lessons, and the topic and system design libraries let you browse older material. The refresh should preserve existing entries and never overwrite the UI code.
