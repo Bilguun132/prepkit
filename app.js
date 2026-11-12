@@ -44,7 +44,7 @@ function renderCoding(){
   editor.value=saved??item.starter;
   document.querySelector('#runResults').innerHTML='';
   document.querySelector('#runCode').onclick=()=>runChecks(item,editor.value);
-  editor.oninput=()=>localStorage.setItem(`prepkit-code-${item.id}`,editor.value);
+  editor.oninput=()=>{localStorage.setItem(`prepkit-code-${item.id}`,editor.value);document.querySelector('#runResults').innerHTML='';if(completedTypes().includes('coding'))unmarkTask('coding');};
   document.querySelectorAll('[data-task="coding"]').forEach(button=>setTaskButton(button,completedTypes().includes('coding')));
   const concept=item.concept;
   document.querySelector('#conceptTitle').textContent=concept.title;document.querySelector('#conceptSummary').textContent=concept.summary;
@@ -89,6 +89,7 @@ function setTaskButton(button,done){button.classList.toggle('completed',done);co
 function markTask(type,title){
   const key=dateKey(today);history[key]??={tasks:[]};if(!history[key].tasks.some(task=>task.type===type))history[key].tasks.push({type,title});saveHistory();updateProgress();renderHistory();
 }
+function unmarkTask(type){const key=dateKey(today);if(!history[key])return;history[key].tasks=history[key].tasks.filter(task=>task.type!==type);if(!history[key].tasks.length)delete history[key];saveHistory();updateProgress();renderHistory();}
 function updateProgress(){
   const done=completedTypes(),count=done.length;setText('#progressText',`${count} of 3 completed`);document.querySelector('#progressFill').style.width=`${count/3*100}%`;
   document.querySelectorAll('[data-task]').forEach(button=>setTaskButton(button,done.includes(button.dataset.task)));
@@ -105,7 +106,7 @@ function navigate(route){
   setText('#breadcrumbCurrent',names[route]||'Today');window.history.replaceState(null,'',`#${route}`);
   if(route==='coding')renderCoding();if(route==='systems')renderSystems();if(route==='trends')renderTrends();if(route==='history')renderHistory();window.scrollTo({top:0,behavior:'smooth'});
 }
-document.addEventListener('click',event=>{const routeLink=event.target.closest('[data-route]');if(routeLink){event.preventDefault();navigate(routeLink.dataset.route);}const taskButton=event.target.closest('[data-task]');if(taskButton){event.preventDefault();const type=taskButton.dataset.task;if(type==='coding'){const output=document.querySelector('#runResults');if(output&&!output.textContent.includes('All checks passed')){output.innerHTML='<div class="run-status fail">Run all sample checks before completing coding practice.</div>';navigate('coding');return;}}markTask(type,dailyContent()[type]?.title||type);}});
+document.addEventListener('click',event=>{const routeLink=event.target.closest('[data-route]');if(routeLink){event.preventDefault();navigate(routeLink.dataset.route);}const taskButton=event.target.closest('[data-task]');if(taskButton){event.preventDefault();const type=taskButton.dataset.task;if(type==='coding'){const output=document.querySelector('#runResults');if(output&&!output.textContent.includes('All checks passed')){navigate('coding');document.querySelector('#runResults').innerHTML='<div class="run-status fail">Run all sample checks before completing coding practice.</div>';return;}}markTask(type,dailyContent()[type]?.title||type);}});
 document.querySelector('#resetDay').addEventListener('click',()=>{delete history[dateKey(today)];saveHistory();updateProgress();renderToday();});
 setText('#todayDate',today.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric',year:'numeric'}));setText('#shortDate',today.toLocaleDateString(undefined,{month:'short',day:'numeric'}).toUpperCase());
 
