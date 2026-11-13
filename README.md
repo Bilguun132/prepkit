@@ -19,3 +19,7 @@ System design questions include a discussion guide and a **Show a strong example
 ## Update the practice content
 
 Edit `topics.json` to add daily algorithm topics, concepts, sample questions, LeetCode links, and per-question visual steps. Edit `content.json` for system design prompts and trend briefings. The daily scheduled refresh appends one new algorithm topic to `topics.json` and one system design scenario plus worked example to `content.json`. The newest entries become the daily lessons, and the topic and system design libraries let you browse older material. The refresh should preserve existing entries and never overwrite the UI code.
+
+## Publish with GitHub Pages
+
+The repository includes a GitHub Actions workflow that deploys the static site whenever `main` is pushed. To publish it, add a GitHub remote, push `main`, and enable GitHub Pages with **GitHub Actions** as the publishing source under the repository's Pages settings. On GitHub Free, the repository needs to be public for Pages hosting.
