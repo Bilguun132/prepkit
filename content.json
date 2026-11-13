@@ -335,6 +335,27 @@
           "body": "Discuss idempotency, fraud, retries, and reconciliation of payment and inventory. Call out the main latency, availability, correctness, and cost tradeoffs; instrument the system and plan gradual capacity changes."
         }
       ]
+    },
+    "webhook-platform": {
+      "intro": "Drive the discussion from requirements and a rough capacity estimate to a durable asynchronous pipeline. State that a delivery may be repeated: exactly-once effects cannot be guaranteed when an external endpoint can receive a request but its acknowledgement is lost. Give each delivery a stable ID so receivers can deduplicate.",
+      "sections": [
+        {
+          "title": "Requirements, API, and capacity",
+          "body": "Assume 1B events/day: 1B ÷ 86,400 ≈ 11.6K events/s on average; design for 10× peaks, or about 116K events/s. With five destinations per event, expect 5B delivery attempts/day, about 58K/s average and 580K/s at peak before retries. At 1 KB/event, ingest is roughly 1 TB/day raw. Keep these estimates explicit and revise them if the interviewer changes fan-out or payload size. Offer POST /v1/events with tenant auth and an idempotency key; endpoint and subscription CRUD; GET /v1/deliveries/{id}; and an administrative replay endpoint."
+        },
+        {
+          "title": "Data model and high-level design",
+          "body": "Store Tenant, Endpoint (URL, secret reference, status, concurrency policy), Subscription (tenant, endpoint, event type), immutable Event (event ID, tenant, type, payload, created time), Delivery (stable delivery ID, endpoint, event ID, state, next attempt), and DeliveryAttempt (status code, latency, timestamp). The ingest API validates and deduplicates, then writes the event and an outbox record transactionally. A publisher moves outbox entries into a partitioned durable log. Fan-out consumers resolve subscriptions and enqueue one delivery per endpoint into queues partitioned by endpoint or endpoint shard. Workers fetch payloads, sign each request with HMAC and a timestamp, and send with tight connect/read timeouts. Status updates and attempt records go to a queryable store."
+        },
+        {
+          "title": "Retries, isolation, and ordering",
+          "body": "Retry timeouts, 429s, and selected 5xx responses with exponential backoff and jitter until the 72-hour deadline; do not retry permanent 4xx responses such as an invalid signature. Move exhausted deliveries to a dead-letter state and expose replay controls. Use per-tenant quotas, fair scheduling, and per-endpoint concurrency limits so a slow receiver cannot block others. If ordering is required for an endpoint, partition and serialize that endpoint’s queue; otherwise allow parallel delivery for throughput. At-least-once delivery can produce duplicates, so send an immutable delivery ID and require idempotent consumers."
+        },
+        {
+          "title": "Security, operations, and tradeoffs",
+          "body": "Require HTTPS, validate endpoint ownership at registration, block private and link-local address ranges to reduce SSRF risk, and recheck DNS/redirect destinations. Keep signing secrets in a secret manager and support rotation. Encrypt stored payloads, apply tenant-scoped access checks, and set retention limits. Track queue age, delivery latency and success by tenant, retry rate, dead-letter count, and worker saturation; alert on growing oldest-message age. Partitioning by endpoint preserves local ordering and fair throttling but creates hot partitions; shard oversized endpoints and relax order only when the contract allows. Keep the event log durable, scale consumers horizontally, and make outbox publishing and state transitions idempotent."
+        }
+      ]
     }
   },
   "systems": [
@@ -553,6 +574,21 @@
         "Use a virtual waiting room to control admission and shed overload.",
         "Reserve inventory with atomic holds and expiry before payment confirmation.",
         "Discuss idempotency, fraud, retries, and reconciliation of payment and inventory."
+      ]
+    },
+    {
+      "id": "webhook-platform",
+      "title": "Design a webhook delivery platform",
+      "topic": "Event delivery",
+      "tag": "Queues and reliability",
+      "scenario": "Design a multi-tenant webhook platform for 5 million customer accounts and up to 1 billion events per day. Customers register HTTPS endpoints and event subscriptions. Deliveries should be low-latency during normal operation, retried for up to 72 hours, observable, and protected from one tenant or failing endpoint overwhelming others. Assume at-least-once delivery is acceptable.",
+      "guide": [
+        "Clarify event volume, fan-out, latency SLO, retry window, payload limits, endpoint security, and whether ordering is required per endpoint.",
+        "Estimate scale: 1B events/day is about 11.6K events/s average; with 10× peaks that is about 116K events/s. At five destinations per event, delivery averages about 58K requests/s and peaks near 580K/s. At 1 KB per event, the raw event stream is about 1 TB/day before replication.",
+        "Define APIs and data: event ingestion with an idempotency key, endpoint and subscription management, delivery status lookup, and replay. Model tenants, endpoints, subscriptions, immutable events, and delivery attempts.",
+        "Draw the flow: authenticated ingestion → durable event log → subscription fan-out → fair per-endpoint queues → delivery workers → customer endpoint; persist attempts and status.",
+        "Deep-dive on retries, exponential backoff with jitter, dead-lettering, replay, signature verification, tenant fairness, endpoint timeouts, and per-destination concurrency limits.",
+        "Explain tradeoffs: at-least-once means duplicates, so stable delivery IDs and receiver idempotency matter; strict ordering reduces parallelism; partition by endpoint when per-endpoint order is required."
       ]
     }
   ],
