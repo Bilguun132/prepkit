@@ -1,0 +1,2783 @@
+{
+  "topics": [
+    {
+      "id": "two-pointers",
+      "title": "Two pointers",
+      "subtitle": "Shrink the search space with every move.",
+      "summary": "Use two positions to inspect a sequence from opposite ends or around a fixed value. A sorted order often tells you which side to move.",
+      "principles": [
+        "Start at opposite ends when the data is sorted or symmetric.",
+        "Use the comparison to discard a whole range of candidates.",
+        "Move one pointer at a time and state why the move is safe."
+      ],
+      "conceptFrames": {
+        "items": [
+          2,
+          7,
+          11,
+          15
+        ],
+        "frames": [
+          {
+            "left": 0,
+            "right": 3,
+            "caption": "Start with the widest pair. Their sum is 17, which is too large.",
+            "state": "sum > target → move the right pointer"
+          },
+          {
+            "left": 0,
+            "right": 2,
+            "caption": "The sum is 13. It is still too large, so move right inward again.",
+            "state": "sum > target → move the right pointer"
+          },
+          {
+            "left": 0,
+            "right": 1,
+            "caption": "The sum is 9. The target pair is found.",
+            "state": "2 + 7 = 9 ✓"
+          }
+        ]
+      },
+      "questions": [
+        {
+          "title": "Two Sum II — Input Array Is Sorted",
+          "difficulty": "Medium",
+          "number": 167,
+          "url": "https://leetcode.com/problems/two-sum-ii-input-array-is-sorted/",
+          "prompt": "Find two numbers in a sorted array that add to the target.",
+          "why": "When the sum is too large, moving the right pointer left is the only move that can lower it. When too small, move left rightward.",
+          "visual": {
+            "items": [
+              2,
+              7,
+              11,
+              15
+            ],
+            "frames": [
+              {
+                "left": 0,
+                "right": 3,
+                "caption": "2 + 15 = 17. Too large; move right left.",
+                "state": "17 > 9"
+              },
+              {
+                "left": 0,
+                "right": 2,
+                "caption": "2 + 11 = 13. Still too large; keep moving right left.",
+                "state": "13 > 9"
+              },
+              {
+                "left": 0,
+                "right": 1,
+                "caption": "2 + 7 = 9. Return the 1-indexed positions.",
+                "state": "answer = [1, 2]"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Container With Most Water",
+          "difficulty": "Medium",
+          "number": 11,
+          "url": "https://leetcode.com/problems/container-with-most-water/",
+          "prompt": "Choose two lines that hold the most water.",
+          "why": "The shorter wall limits the water height. Moving the taller wall inward only reduces width without improving the limiting height, so move the shorter wall.",
+          "visual": {
+            "items": [
+              1,
+              8,
+              6,
+              2,
+              5,
+              4,
+              8,
+              3,
+              7
+            ],
+            "frames": [
+              {
+                "left": 0,
+                "right": 8,
+                "caption": "Area = min(1, 7) × 8 = 8. The left wall is shorter, so move left.",
+                "state": "best = 8"
+              },
+              {
+                "left": 1,
+                "right": 8,
+                "caption": "Area = min(8, 7) × 7 = 49. The right wall is shorter, so move right.",
+                "state": "best = 49"
+              },
+              {
+                "left": 1,
+                "right": 7,
+                "caption": "Area = min(8, 3) × 6 = 18. Width shrinks; the best remains 49.",
+                "state": "best = 49"
+              }
+            ]
+          }
+        },
+        {
+          "title": "3Sum",
+          "difficulty": "Medium",
+          "number": 15,
+          "url": "https://leetcode.com/problems/3sum/",
+          "prompt": "Find unique triplets whose sum is zero.",
+          "why": "Sort first. Fix one value, then use two pointers on the remaining sorted suffix; skip equal values to avoid duplicate triplets.",
+          "visual": {
+            "items": [
+              -4,
+              -1,
+              -1,
+              0,
+              1,
+              2
+            ],
+            "frames": [
+              {
+                "pivot": 0,
+                "left": 1,
+                "right": 5,
+                "caption": "Fix −4. The sum is −3, so move left to increase it.",
+                "state": "−4 + −1 + 2 = −3"
+              },
+              {
+                "pivot": 0,
+                "left": 2,
+                "right": 5,
+                "caption": "The sum is still negative. Move left past the duplicate −1.",
+                "state": "−4 + −1 + 2 = −3"
+              },
+              {
+                "pivot": 1,
+                "left": 2,
+                "right": 5,
+                "caption": "Fix −1. The triplet [−1, −1, 2] sums to zero.",
+                "state": "−1 + −1 + 2 = 0 ✓"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "sliding-window",
+      "title": "Sliding window",
+      "subtitle": "Grow a valid range, then shrink it when needed.",
+      "summary": "Keep a moving interval over a string or array. Expand the right edge to include new data, then move the left edge to restore the rule or improve the answer.",
+      "principles": [
+        "Track what the current window contains.",
+        "Move the right edge to explore new input.",
+        "Move the left edge only when the window condition requires it."
+      ],
+      "conceptFrames": {
+        "items": [
+          "a",
+          "b",
+          "c",
+          "a",
+          "b",
+          "c",
+          "b",
+          "b"
+        ],
+        "frames": [
+          {
+            "left": 0,
+            "right": 2,
+            "caption": "The window “abc” has no repeats. Record length 3.",
+            "state": "best = 3"
+          },
+          {
+            "left": 1,
+            "right": 3,
+            "caption": "The next “a” repeats. Move left past the previous a; the new window is “bca”.",
+            "state": "duplicate → shrink from left"
+          },
+          {
+            "left": 2,
+            "right": 4,
+            "caption": "Keep expanding and shrinking while preserving a duplicate-free window.",
+            "state": "best remains 3"
+          }
+        ]
+      },
+      "questions": [
+        {
+          "title": "Longest Substring Without Repeating Characters",
+          "difficulty": "Medium",
+          "number": 3,
+          "url": "https://leetcode.com/problems/longest-substring-without-repeating-characters/",
+          "prompt": "Find the longest substring with no repeated characters.",
+          "why": "A map of last-seen positions lets the left edge jump past a duplicate while never moving backwards.",
+          "visual": {
+            "items": [
+              "a",
+              "b",
+              "c",
+              "a",
+              "b",
+              "c",
+              "b",
+              "b"
+            ],
+            "frames": [
+              {
+                "left": 0,
+                "right": 2,
+                "caption": "“abc” is valid and has length 3.",
+                "state": "best = 3"
+              },
+              {
+                "left": 1,
+                "right": 3,
+                "caption": "The second a repeats. Move left just past its old position.",
+                "state": "window = “bca”"
+              },
+              {
+                "left": 2,
+                "right": 4,
+                "caption": "The second b repeats. Move left past the old b; never move it backwards.",
+                "state": "window = “cab” · best = 3"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Minimum Window Substring",
+          "difficulty": "Hard",
+          "number": 76,
+          "url": "https://leetcode.com/problems/minimum-window-substring/",
+          "prompt": "Find the shortest substring that contains every required character, including duplicates.",
+          "why": "Expand until all required counts are met. Then shrink from the left while the window remains valid, saving the shortest valid range.",
+          "visual": {
+            "items": [
+              "A",
+              "D",
+              "O",
+              "B",
+              "E",
+              "C",
+              "O",
+              "D",
+              "E",
+              "B",
+              "A",
+              "N",
+              "C"
+            ],
+            "frames": [
+              {
+                "left": 0,
+                "right": 5,
+                "caption": "The range ADOBEC contains A, B, and C. The window is valid.",
+                "state": "valid · length 6"
+              },
+              {
+                "left": 1,
+                "right": 5,
+                "caption": "Removing A makes the window invalid. Expand right to find A again.",
+                "state": "missing A → expand"
+              },
+              {
+                "left": 9,
+                "right": 12,
+                "caption": "BANC contains every required letter and is the shortest range found.",
+                "state": "answer = “BANC”"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Longest Repeating Character Replacement",
+          "difficulty": "Medium",
+          "number": 424,
+          "url": "https://leetcode.com/problems/longest-repeating-character-replacement/",
+          "prompt": "Find the longest substring that can be made of one repeated character with at most k replacements.",
+          "why": "A window is valid when its length minus the most frequent character count is at most k.",
+          "visual": {
+            "items": [
+              "A",
+              "A",
+              "B",
+              "A",
+              "B",
+              "B",
+              "A"
+            ],
+            "frames": [
+              {
+                "left": 0,
+                "right": 3,
+                "caption": "AABA has one non-A character, so one replacement makes four As.",
+                "state": "window length 4 · replacements 1"
+              },
+              {
+                "left": 0,
+                "right": 4,
+                "caption": "AABAB needs two replacements, exceeding k = 1. Move left forward.",
+                "state": "invalid → shrink"
+              },
+              {
+                "left": 1,
+                "right": 4,
+                "caption": "ABAB fits one replacement for a repeated-character window of length 4.",
+                "state": "best = 4"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "hash-maps",
+      "title": "Hash maps",
+      "subtitle": "Trade a little memory for fast lookups.",
+      "summary": "Record values or counts as you scan. A hash map can answer “have I seen this?” or “how often?” without repeatedly searching the whole input.",
+      "principles": [
+        "Choose a key that captures the property you need.",
+        "Update the map as each value is processed.",
+        "Be clear about whether your map stores indices, counts, or groups."
+      ],
+      "conceptFrames": {
+        "items": [
+          2,
+          7,
+          11,
+          15
+        ],
+        "frames": [
+          {
+            "active": [
+              0
+            ],
+            "caption": "Before storing 2, compute the complement needed for target 9.",
+            "state": "need 7 · map = {}"
+          },
+          {
+            "active": [
+              0,
+              1
+            ],
+            "caption": "At 7, the map already contains its complement 2.",
+            "state": "2 found in O(1) average lookup"
+          },
+          {
+            "active": [
+              0,
+              1
+            ],
+            "caption": "Store the value and index only after checking, so one item cannot match itself.",
+            "state": "one pass · O(n) space"
+          }
+        ]
+      },
+      "questions": [
+        {
+          "title": "Two Sum",
+          "difficulty": "Easy",
+          "number": 1,
+          "url": "https://leetcode.com/problems/two-sum/",
+          "prompt": "Return the indices of two values that add to the target.",
+          "why": "For each value, look up its complement among values already seen. This avoids checking every pair.",
+          "visual": {
+            "items": [
+              2,
+              7,
+              11,
+              15
+            ],
+            "frames": [
+              {
+                "active": [
+                  0
+                ],
+                "caption": "At 2, the complement is 7. It is not in the map, so store 2 → index 0.",
+                "state": "map = {2: 0}"
+              },
+              {
+                "active": [
+                  0,
+                  1
+                ],
+                "caption": "At 7, the complement is 2. The map finds it immediately.",
+                "state": "answer indices = [0, 1]"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Group Anagrams",
+          "difficulty": "Medium",
+          "number": 49,
+          "url": "https://leetcode.com/problems/group-anagrams/",
+          "prompt": "Group words that contain the same letters in a different order.",
+          "why": "Map each word to a canonical key, such as its sorted letters, then append the word to that key’s bucket.",
+          "visual": {
+            "items": [
+              "eat",
+              "tea",
+              "tan",
+              "ate",
+              "nat",
+              "bat"
+            ],
+            "frames": [
+              {
+                "active": [
+                  0
+                ],
+                "caption": "“eat” becomes the canonical key “aet”. Create that bucket.",
+                "state": "aet → [eat]"
+              },
+              {
+                "active": [
+                  0,
+                  1,
+                  3
+                ],
+                "caption": "“tea” and “ate” produce the same key, so they join the bucket.",
+                "state": "aet → [eat, tea, ate]"
+              },
+              {
+                "active": [
+                  2,
+                  4
+                ],
+                "caption": "“tan” and “nat” share key “ant”; “bat” starts another group.",
+                "state": "3 groups"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Longest Consecutive Sequence",
+          "difficulty": "Medium",
+          "number": 128,
+          "url": "https://leetcode.com/problems/longest-consecutive-sequence/",
+          "prompt": "Return the length of the longest consecutive-value sequence in an unsorted array.",
+          "why": "Put values in a set and start counting only at numbers whose predecessor is absent. Each run is then scanned once.",
+          "visual": {
+            "items": [
+              100,
+              4,
+              200,
+              1,
+              3,
+              2
+            ],
+            "frames": [
+              {
+                "active": [
+                  1
+                ],
+                "caption": "4 has predecessor 3, so it is not the start of a run.",
+                "state": "skip non-start"
+              },
+              {
+                "active": [
+                  3,
+                  4,
+                  5
+                ],
+                "caption": "1 has no predecessor. Count 1, 2, 3, 4.",
+                "state": "run length = 4"
+              },
+              {
+                "active": [
+                  2
+                ],
+                "caption": "200 starts a run of length 1. The longest run remains four.",
+                "state": "answer = 4"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "binary-search",
+      "title": "Binary search",
+      "subtitle": "Use an invariant to halve the search space.",
+      "summary": "On sorted or monotonic data, compare the midpoint with the target and discard the half that cannot contain the answer.",
+      "principles": [
+        "Define what the left and right boundaries mean.",
+        "Use a midpoint that guarantees progress.",
+        "After each comparison, keep the half where the answer can still exist."
+      ],
+      "conceptFrames": {
+        "items": [
+          -1,
+          0,
+          3,
+          5,
+          9,
+          12
+        ],
+        "frames": [
+          {
+            "left": 0,
+            "right": 5,
+            "pivot": 2,
+            "caption": "Check the middle value 3. The target 9 must be to its right.",
+            "state": "discard indices 0–2"
+          },
+          {
+            "left": 3,
+            "right": 5,
+            "pivot": 4,
+            "caption": "The middle is 9. The target is found.",
+            "state": "target at index 4"
+          }
+        ]
+      },
+      "questions": [
+        {
+          "title": "Binary Search",
+          "difficulty": "Easy",
+          "number": 704,
+          "url": "https://leetcode.com/problems/binary-search/",
+          "prompt": "Find the index of a target in a sorted array, or return −1.",
+          "why": "Each midpoint comparison removes half the remaining candidates, giving logarithmic search time.",
+          "visual": {
+            "items": [
+              -1,
+              0,
+              3,
+              5,
+              9,
+              12
+            ],
+            "frames": [
+              {
+                "left": 0,
+                "right": 5,
+                "pivot": 2,
+                "caption": "mid = 2, value 3. Since 3 < 9, discard the left half.",
+                "state": "search indices 3–5"
+              },
+              {
+                "left": 3,
+                "right": 5,
+                "pivot": 4,
+                "caption": "mid = 4, value 9. Match found.",
+                "state": "answer = 4"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Search in Rotated Sorted Array",
+          "difficulty": "Medium",
+          "number": 33,
+          "url": "https://leetcode.com/problems/search-in-rotated-sorted-array/",
+          "prompt": "Search a rotated sorted array in O(log n) time.",
+          "why": "At least one half around the midpoint is sorted. Check whether the target lies in that half before discarding the other.",
+          "visual": {
+            "items": [
+              4,
+              5,
+              6,
+              7,
+              0,
+              1,
+              2
+            ],
+            "frames": [
+              {
+                "left": 0,
+                "right": 6,
+                "pivot": 3,
+                "caption": "mid = 3, value 7. The left half is sorted and target 0 is not in it.",
+                "state": "search right half"
+              },
+              {
+                "left": 4,
+                "right": 6,
+                "pivot": 5,
+                "caption": "mid = 5, value 1. The left half [0,1] is sorted; target 0 is there.",
+                "state": "search left half"
+              },
+              {
+                "left": 4,
+                "right": 4,
+                "pivot": 4,
+                "caption": "Value 0 is found at index 4.",
+                "state": "answer = 4"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Find Minimum in Rotated Sorted Array",
+          "difficulty": "Medium",
+          "number": 153,
+          "url": "https://leetcode.com/problems/find-minimum-in-rotated-sorted-array/",
+          "prompt": "Find the smallest value in a rotated sorted array with unique values.",
+          "why": "Compare the midpoint to the right edge. That tells you which side still contains the rotation pivot.",
+          "visual": {
+            "items": [
+              4,
+              5,
+              6,
+              7,
+              0,
+              1,
+              2
+            ],
+            "frames": [
+              {
+                "left": 0,
+                "right": 6,
+                "pivot": 3,
+                "caption": "Value 7 is greater than the right edge 2, so the minimum lies to the right.",
+                "state": "left = mid + 1"
+              },
+              {
+                "left": 4,
+                "right": 6,
+                "pivot": 5,
+                "caption": "Value 1 is less than right edge 2; keep the midpoint in the range.",
+                "state": "right = mid"
+              },
+              {
+                "left": 4,
+                "right": 4,
+                "pivot": 4,
+                "caption": "The boundaries meet at the minimum value 0.",
+                "state": "minimum = 0"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "prefix-sums",
+      "title": "Prefix sums",
+      "subtitle": "Answer range questions from accumulated totals.",
+      "summary": "Store the running total so a range sum can be found by subtracting two prefixes.",
+      "principles": [
+        "Define prefix[i] as the sum before index i.",
+        "A range sum [l, r] is prefix[r + 1] − prefix[l].",
+        "For target-sum subarrays, count earlier prefixes equal to current − target."
+      ],
+      "conceptFrames": {
+        "items": [
+          3,
+          1,
+          4,
+          2
+        ],
+        "frames": [
+          {
+            "active": [
+              0
+            ],
+            "caption": "Observe the current state: 0.",
+            "state": 0
+          },
+          {
+            "active": [
+              0,
+              1
+            ],
+            "caption": "Apply the pattern and update the stored state: 3.",
+            "state": 3
+          },
+          {
+            "active": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "caption": "The invariant leads to the result: 8.",
+            "state": 8
+          }
+        ]
+      },
+      "questions": [
+        {
+          "title": "Subarray Sum Equals K",
+          "difficulty": "Medium",
+          "number": 560,
+          "url": "https://leetcode.com/problems/subarray-sum-equals-k/",
+          "prompt": "Count contiguous ranges whose sum is k.",
+          "why": "For each running sum s, earlier prefixes equal to s − k complete a valid range.",
+          "visual": {
+            "items": [
+              3,
+              1,
+              4,
+              2
+            ],
+            "frames": [
+              {
+                "active": [
+                  0
+                ],
+                "caption": "Identify the state relevant to Subarray Sum Equals K.",
+                "state": 0
+              },
+              {
+                "active": [
+                  1
+                ],
+                "caption": "For each running sum s, earlier prefixes equal to s − k complete a valid range.",
+                "state": 3
+              },
+              {
+                "active": [
+                  2
+                ],
+                "caption": "Apply the same invariant to complete Subarray Sum Equals K.",
+                "state": 8
+              }
+            ]
+          }
+        },
+        {
+          "title": "Product of Array Except Self",
+          "difficulty": "Medium",
+          "number": 238,
+          "url": "https://leetcode.com/problems/product-of-array-except-self/",
+          "prompt": "Build each position’s product without division.",
+          "why": "A prefix product and a suffix product give the answer while using constant extra space.",
+          "visual": {
+            "items": [
+              3,
+              1,
+              4,
+              2
+            ],
+            "frames": [
+              {
+                "active": [
+                  0
+                ],
+                "caption": "Identify the state relevant to Product of Array Except Self.",
+                "state": 0
+              },
+              {
+                "active": [
+                  1
+                ],
+                "caption": "A prefix product and a suffix product give the answer while using constant extra space.",
+                "state": 3
+              },
+              {
+                "active": [
+                  2
+                ],
+                "caption": "Apply the same invariant to complete Product of Array Except Self.",
+                "state": 8
+              }
+            ]
+          }
+        },
+        {
+          "title": "Range Sum Query — Immutable",
+          "difficulty": "Easy",
+          "number": 303,
+          "url": "https://leetcode.com/problems/range-sum-query-immutable/",
+          "prompt": "Answer repeated range-sum queries quickly.",
+          "why": "Precompute prefix totals once, then answer each query with one subtraction.",
+          "visual": {
+            "items": [
+              3,
+              1,
+              4,
+              2
+            ],
+            "frames": [
+              {
+                "active": [
+                  0
+                ],
+                "caption": "Identify the state relevant to Range Sum Query — Immutable.",
+                "state": 0
+              },
+              {
+                "active": [
+                  1
+                ],
+                "caption": "Precompute prefix totals once, then answer each query with one subtraction.",
+                "state": 3
+              },
+              {
+                "active": [
+                  2
+                ],
+                "caption": "Apply the same invariant to complete Range Sum Query — Immutable.",
+                "state": 8
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "stack",
+      "title": "Stacks",
+      "subtitle": "Use last-in, first-out state to match, undo, or wait.",
+      "summary": "A stack keeps the most recent unresolved item accessible. Pop it when the current item resolves it.",
+      "principles": [
+        "Push unresolved items with the information needed later.",
+        "Pop only when the current item satisfies the stack condition.",
+        "Each item should enter and leave at most once."
+      ],
+      "conceptFrames": {
+        "items": [
+          "(",
+          ")",
+          "[",
+          "]",
+          "{",
+          "}"
+        ],
+        "frames": [
+          {
+            "active": [
+              0
+            ],
+            "caption": "Observe the current state: (.",
+            "state": "("
+          },
+          {
+            "active": [
+              0,
+              1
+            ],
+            "caption": "Apply the pattern and update the stored state: ✓.",
+            "state": "✓"
+          },
+          {
+            "active": [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5
+            ],
+            "caption": "The invariant leads to the result: ✓.",
+            "state": "✓"
+          }
+        ]
+      },
+      "questions": [
+        {
+          "title": "Valid Parentheses",
+          "difficulty": "Easy",
+          "number": 20,
+          "url": "https://leetcode.com/problems/valid-parentheses/",
+          "prompt": "Check whether brackets close in the right order.",
+          "why": "The newest unmatched opening bracket must be the next one closed.",
+          "visual": {
+            "items": [
+              "(",
+              ")",
+              "[",
+              "]",
+              "{",
+              "}"
+            ],
+            "frames": [
+              {
+                "active": [
+                  0
+                ],
+                "caption": "Identify the state relevant to Valid Parentheses.",
+                "state": "("
+              },
+              {
+                "active": [
+                  1
+                ],
+                "caption": "The newest unmatched opening bracket must be the next one closed.",
+                "state": "✓"
+              },
+              {
+                "active": [
+                  2
+                ],
+                "caption": "Apply the same invariant to complete Valid Parentheses.",
+                "state": "✓"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Min Stack",
+          "difficulty": "Medium",
+          "number": 155,
+          "url": "https://leetcode.com/problems/min-stack/",
+          "prompt": "Support push, pop, top, and minimum in constant time.",
+          "why": "Store the minimum-so-far alongside each stack state.",
+          "visual": {
+            "items": [
+              "(",
+              ")",
+              "[",
+              "]",
+              "{",
+              "}"
+            ],
+            "frames": [
+              {
+                "active": [
+                  0
+                ],
+                "caption": "Identify the state relevant to Min Stack.",
+                "state": "("
+              },
+              {
+                "active": [
+                  1
+                ],
+                "caption": "Store the minimum-so-far alongside each stack state.",
+                "state": "✓"
+              },
+              {
+                "active": [
+                  2
+                ],
+                "caption": "Apply the same invariant to complete Min Stack.",
+                "state": "✓"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Daily Temperatures",
+          "difficulty": "Medium",
+          "number": 739,
+          "url": "https://leetcode.com/problems/daily-temperatures/",
+          "prompt": "Find how many days until a warmer temperature.",
+          "why": "A monotonic decreasing stack stores days still waiting for a warmer value.",
+          "visual": {
+            "items": [
+              "(",
+              ")",
+              "[",
+              "]",
+              "{",
+              "}"
+            ],
+            "frames": [
+              {
+                "active": [
+                  0
+                ],
+                "caption": "Identify the state relevant to Daily Temperatures.",
+                "state": "("
+              },
+              {
+                "active": [
+                  1
+                ],
+                "caption": "A monotonic decreasing stack stores days still waiting for a warmer value.",
+                "state": "✓"
+              },
+              {
+                "active": [
+                  2
+                ],
+                "caption": "Apply the same invariant to complete Daily Temperatures.",
+                "state": "✓"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "linked-lists",
+      "title": "Linked lists",
+      "subtitle": "Rewire references safely while traversing nodes.",
+      "summary": "Linked-list algorithms depend on preserving the next reference before changing a pointer.",
+      "principles": [
+        "Keep a previous pointer when reversing links.",
+        "Use fast and slow pointers for cycle or midpoint questions.",
+        "Draw the references before updating them."
+      ],
+      "conceptFrames": {
+        "items": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "frames": [
+          {
+            "active": [
+              0
+            ],
+            "caption": "Observe the current state: 4.",
+            "state": 4
+          },
+          {
+            "active": [
+              0,
+              1
+            ],
+            "caption": "Apply the pattern and update the stored state: 3.",
+            "state": 3
+          },
+          {
+            "active": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "caption": "The invariant leads to the result: 1.",
+            "state": 1
+          }
+        ]
+      },
+      "questions": [
+        {
+          "title": "Reverse Linked List",
+          "difficulty": "Easy",
+          "number": 206,
+          "url": "https://leetcode.com/problems/reverse-linked-list/",
+          "prompt": "Reverse a singly linked list.",
+          "why": "Save next, point current to previous, then advance both references.",
+          "visual": {
+            "items": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "frames": [
+              {
+                "active": [
+                  0
+                ],
+                "caption": "Identify the state relevant to Reverse Linked List.",
+                "state": 4
+              },
+              {
+                "active": [
+                  1
+                ],
+                "caption": "Save next, point current to previous, then advance both references.",
+                "state": 3
+              },
+              {
+                "active": [
+                  2
+                ],
+                "caption": "Apply the same invariant to complete Reverse Linked List.",
+                "state": 1
+              }
+            ]
+          }
+        },
+        {
+          "title": "Merge Two Sorted Lists",
+          "difficulty": "Easy",
+          "number": 21,
+          "url": "https://leetcode.com/problems/merge-two-sorted-lists/",
+          "prompt": "Merge two sorted linked lists.",
+          "why": "Attach the smaller head each time and advance only that list.",
+          "visual": {
+            "items": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "frames": [
+              {
+                "active": [
+                  0
+                ],
+                "caption": "Identify the state relevant to Merge Two Sorted Lists.",
+                "state": 4
+              },
+              {
+                "active": [
+                  1
+                ],
+                "caption": "Attach the smaller head each time and advance only that list.",
+                "state": 3
+              },
+              {
+                "active": [
+                  2
+                ],
+                "caption": "Apply the same invariant to complete Merge Two Sorted Lists.",
+                "state": 1
+              }
+            ]
+          }
+        },
+        {
+          "title": "Linked List Cycle",
+          "difficulty": "Easy",
+          "number": 141,
+          "url": "https://leetcode.com/problems/linked-list-cycle/",
+          "prompt": "Determine whether a list loops back to an earlier node.",
+          "why": "A fast pointer gains one node per step on a slow pointer inside a cycle.",
+          "visual": {
+            "items": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "frames": [
+              {
+                "active": [
+                  0
+                ],
+                "caption": "Identify the state relevant to Linked List Cycle.",
+                "state": 4
+              },
+              {
+                "active": [
+                  1
+                ],
+                "caption": "A fast pointer gains one node per step on a slow pointer inside a cycle.",
+                "state": 3
+              },
+              {
+                "active": [
+                  2
+                ],
+                "caption": "Apply the same invariant to complete Linked List Cycle.",
+                "state": 1
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "trees",
+      "title": "Tree traversal",
+      "subtitle": "Choose an order that matches the information you need.",
+      "summary": "Depth-first traversal explores a branch; breadth-first traversal processes one depth at a time.",
+      "principles": [
+        "Preorder visits a node before its children.",
+        "Inorder on a BST visits values in sorted order.",
+        "A queue naturally implements level-order traversal."
+      ],
+      "conceptFrames": {
+        "items": [
+          3,
+          9,
+          20,
+          15,
+          7
+        ],
+        "frames": [
+          {
+            "active": [
+              0
+            ],
+            "caption": "Observe the current state: 3.",
+            "state": 3
+          },
+          {
+            "active": [
+              0,
+              1
+            ],
+            "caption": "Apply the pattern and update the stored state: 9.",
+            "state": 9
+          },
+          {
+            "active": [
+              0,
+              1,
+              2,
+              3,
+              4
+            ],
+            "caption": "The invariant leads to the result: 7.",
+            "state": 7
+          }
+        ]
+      },
+      "questions": [
+        {
+          "title": "Binary Tree Level Order Traversal",
+          "difficulty": "Medium",
+          "number": 102,
+          "url": "https://leetcode.com/problems/binary-tree-level-order-traversal/",
+          "prompt": "Return node values one level at a time.",
+          "why": "Capture the queue size before processing a level, then enqueue its children.",
+          "visual": {
+            "items": [
+              3,
+              9,
+              20,
+              15,
+              7
+            ],
+            "frames": [
+              {
+                "active": [
+                  0
+                ],
+                "caption": "Identify the state relevant to Binary Tree Level Order Traversal.",
+                "state": 3
+              },
+              {
+                "active": [
+                  1
+                ],
+                "caption": "Capture the queue size before processing a level, then enqueue its children.",
+                "state": 9
+              },
+              {
+                "active": [
+                  2
+                ],
+                "caption": "Apply the same invariant to complete Binary Tree Level Order Traversal.",
+                "state": 7
+              }
+            ]
+          }
+        },
+        {
+          "title": "Maximum Depth of Binary Tree",
+          "difficulty": "Easy",
+          "number": 104,
+          "url": "https://leetcode.com/problems/maximum-depth-of-binary-tree/",
+          "prompt": "Find the longest root-to-leaf path.",
+          "why": "Depth is one plus the larger child depth, with an empty tree at depth zero.",
+          "visual": {
+            "items": [
+              3,
+              9,
+              20,
+              15,
+              7
+            ],
+            "frames": [
+              {
+                "active": [
+                  0
+                ],
+                "caption": "Identify the state relevant to Maximum Depth of Binary Tree.",
+                "state": 3
+              },
+              {
+                "active": [
+                  1
+                ],
+                "caption": "Depth is one plus the larger child depth, with an empty tree at depth zero.",
+                "state": 9
+              },
+              {
+                "active": [
+                  2
+                ],
+                "caption": "Apply the same invariant to complete Maximum Depth of Binary Tree.",
+                "state": 7
+              }
+            ]
+          }
+        },
+        {
+          "title": "Validate Binary Search Tree",
+          "difficulty": "Medium",
+          "number": 98,
+          "url": "https://leetcode.com/problems/validate-binary-search-tree/",
+          "prompt": "Check whether every node obeys BST ordering.",
+          "why": "Pass a valid lower and upper bound down each branch.",
+          "visual": {
+            "items": [
+              3,
+              9,
+              20,
+              15,
+              7
+            ],
+            "frames": [
+              {
+                "active": [
+                  0
+                ],
+                "caption": "Identify the state relevant to Validate Binary Search Tree.",
+                "state": 3
+              },
+              {
+                "active": [
+                  1
+                ],
+                "caption": "Pass a valid lower and upper bound down each branch.",
+                "state": 9
+              },
+              {
+                "active": [
+                  2
+                ],
+                "caption": "Apply the same invariant to complete Validate Binary Search Tree.",
+                "state": 7
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "graphs",
+      "title": "Graph traversal",
+      "subtitle": "Track visited nodes while exploring connections.",
+      "summary": "A graph search expands neighboring nodes and marks each as visited to avoid repeated work.",
+      "principles": [
+        "Use a queue for breadth-first shortest paths in unweighted graphs.",
+        "Mark nodes visited when enqueuing them.",
+        "For components, start a traversal at every still-unvisited node."
+      ],
+      "conceptFrames": {
+        "items": [
+          "A",
+          "B",
+          "C",
+          "D"
+        ],
+        "frames": [
+          {
+            "active": [
+              0
+            ],
+            "caption": "Observe the current state: A.",
+            "state": "A"
+          },
+          {
+            "active": [
+              0,
+              1
+            ],
+            "caption": "Apply the pattern and update the stored state: B.",
+            "state": "B"
+          },
+          {
+            "active": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "caption": "The invariant leads to the result: D.",
+            "state": "D"
+          }
+        ]
+      },
+      "questions": [
+        {
+          "title": "Number of Islands",
+          "difficulty": "Medium",
+          "number": 200,
+          "url": "https://leetcode.com/problems/number-of-islands/",
+          "prompt": "Count connected groups of land in a grid.",
+          "why": "Flood-fill each unvisited land cell and mark its whole component.",
+          "visual": {
+            "items": [
+              "A",
+              "B",
+              "C",
+              "D"
+            ],
+            "frames": [
+              {
+                "active": [
+                  0
+                ],
+                "caption": "Identify the state relevant to Number of Islands.",
+                "state": "A"
+              },
+              {
+                "active": [
+                  1
+                ],
+                "caption": "Flood-fill each unvisited land cell and mark its whole component.",
+                "state": "B"
+              },
+              {
+                "active": [
+                  2
+                ],
+                "caption": "Apply the same invariant to complete Number of Islands.",
+                "state": "D"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Clone Graph",
+          "difficulty": "Medium",
+          "number": 133,
+          "url": "https://leetcode.com/problems/clone-graph/",
+          "prompt": "Deep-copy a connected graph.",
+          "why": "Map each original node to one clone before recursively cloning neighbors.",
+          "visual": {
+            "items": [
+              "A",
+              "B",
+              "C",
+              "D"
+            ],
+            "frames": [
+              {
+                "active": [
+                  0
+                ],
+                "caption": "Identify the state relevant to Clone Graph.",
+                "state": "A"
+              },
+              {
+                "active": [
+                  1
+                ],
+                "caption": "Map each original node to one clone before recursively cloning neighbors.",
+                "state": "B"
+              },
+              {
+                "active": [
+                  2
+                ],
+                "caption": "Apply the same invariant to complete Clone Graph.",
+                "state": "D"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Course Schedule",
+          "difficulty": "Medium",
+          "number": 207,
+          "url": "https://leetcode.com/problems/course-schedule/",
+          "prompt": "Determine whether prerequisite courses contain a cycle.",
+          "why": "A topological ordering exists exactly when every node can be removed by indegree.",
+          "visual": {
+            "items": [
+              "A",
+              "B",
+              "C",
+              "D"
+            ],
+            "frames": [
+              {
+                "active": [
+                  0
+                ],
+                "caption": "Identify the state relevant to Course Schedule.",
+                "state": "A"
+              },
+              {
+                "active": [
+                  1
+                ],
+                "caption": "A topological ordering exists exactly when every node can be removed by indegree.",
+                "state": "B"
+              },
+              {
+                "active": [
+                  2
+                ],
+                "caption": "Apply the same invariant to complete Course Schedule.",
+                "state": "D"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "heaps",
+      "title": "Heaps and top K",
+      "subtitle": "Keep the most useful candidate at the root.",
+      "summary": "A heap gives fast access to the smallest or largest priority while keeping updates logarithmic.",
+      "principles": [
+        "Use a min-heap of size k to retain the k largest values.",
+        "A max-heap can repeatedly return the next highest priority.",
+        "State what the root represents before choosing heap type."
+      ],
+      "conceptFrames": {
+        "items": [
+          4,
+          1,
+          7,
+          3,
+          8
+        ],
+        "frames": [
+          {
+            "active": [
+              0
+            ],
+            "caption": "Observe the current state: 1.",
+            "state": 1
+          },
+          {
+            "active": [
+              0,
+              1
+            ],
+            "caption": "Apply the pattern and update the stored state: 3.",
+            "state": 3
+          },
+          {
+            "active": [
+              0,
+              1,
+              2,
+              3,
+              4
+            ],
+            "caption": "The invariant leads to the result: 8.",
+            "state": 8
+          }
+        ]
+      },
+      "questions": [
+        {
+          "title": "Top K Frequent Elements",
+          "difficulty": "Medium",
+          "number": 347,
+          "url": "https://leetcode.com/problems/top-k-frequent-elements/",
+          "prompt": "Return the k most frequent values.",
+          "why": "Count frequencies, then keep the best k candidates with a heap or buckets.",
+          "visual": {
+            "items": [
+              4,
+              1,
+              7,
+              3,
+              8
+            ],
+            "frames": [
+              {
+                "active": [
+                  0
+                ],
+                "caption": "Identify the state relevant to Top K Frequent Elements.",
+                "state": 1
+              },
+              {
+                "active": [
+                  1
+                ],
+                "caption": "Count frequencies, then keep the best k candidates with a heap or buckets.",
+                "state": 3
+              },
+              {
+                "active": [
+                  2
+                ],
+                "caption": "Apply the same invariant to complete Top K Frequent Elements.",
+                "state": 8
+              }
+            ]
+          }
+        },
+        {
+          "title": "Kth Largest Element in an Array",
+          "difficulty": "Medium",
+          "number": 215,
+          "url": "https://leetcode.com/problems/kth-largest-element-in-an-array/",
+          "prompt": "Find the kth largest value without fully sorting.",
+          "why": "Maintain a min-heap of size k; its root is the kth largest seen.",
+          "visual": {
+            "items": [
+              4,
+              1,
+              7,
+              3,
+              8
+            ],
+            "frames": [
+              {
+                "active": [
+                  0
+                ],
+                "caption": "Identify the state relevant to Kth Largest Element in an Array.",
+                "state": 1
+              },
+              {
+                "active": [
+                  1
+                ],
+                "caption": "Maintain a min-heap of size k; its root is the kth largest seen.",
+                "state": 3
+              },
+              {
+                "active": [
+                  2
+                ],
+                "caption": "Apply the same invariant to complete Kth Largest Element in an Array.",
+                "state": 8
+              }
+            ]
+          }
+        },
+        {
+          "title": "Merge k Sorted Lists",
+          "difficulty": "Hard",
+          "number": 23,
+          "url": "https://leetcode.com/problems/merge-k-sorted-lists/",
+          "prompt": "Merge multiple sorted linked lists efficiently.",
+          "why": "A min-heap stores the current head from each list; pop one and add its successor.",
+          "visual": {
+            "items": [
+              4,
+              1,
+              7,
+              3,
+              8
+            ],
+            "frames": [
+              {
+                "active": [
+                  0
+                ],
+                "caption": "Identify the state relevant to Merge k Sorted Lists.",
+                "state": 1
+              },
+              {
+                "active": [
+                  1
+                ],
+                "caption": "A min-heap stores the current head from each list; pop one and add its successor.",
+                "state": 3
+              },
+              {
+                "active": [
+                  2
+                ],
+                "caption": "Apply the same invariant to complete Merge k Sorted Lists.",
+                "state": 8
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "backtracking",
+      "title": "Backtracking",
+      "subtitle": "Explore choices and undo each choice on return.",
+      "summary": "Backtracking builds a partial answer, explores valid continuations, then restores state to try another branch.",
+      "principles": [
+        "Define the choices available at each position.",
+        "Add a choice, recurse, then undo it.",
+        "Prune branches that cannot lead to a valid answer."
+      ],
+      "conceptFrames": {
+        "items": [
+          "start",
+          "choose 1",
+          "choose 2",
+          "undo"
+        ],
+        "frames": [
+          {
+            "active": [
+              0
+            ],
+            "caption": "Observe the current state: [].",
+            "state": "[]"
+          },
+          {
+            "active": [
+              0,
+              1
+            ],
+            "caption": "Apply the pattern and update the stored state: [1].",
+            "state": "[1]"
+          },
+          {
+            "active": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "caption": "The invariant leads to the result: [2].",
+            "state": "[2]"
+          }
+        ]
+      },
+      "questions": [
+        {
+          "title": "Subsets",
+          "difficulty": "Medium",
+          "number": 78,
+          "url": "https://leetcode.com/problems/subsets/",
+          "prompt": "Generate every subset of distinct values.",
+          "why": "At each index, branch into include or exclude; each decision path is one subset.",
+          "visual": {
+            "items": [
+              "start",
+              "choose 1",
+              "choose 2",
+              "undo"
+            ],
+            "frames": [
+              {
+                "active": [
+                  0
+                ],
+                "caption": "Identify the state relevant to Subsets.",
+                "state": "[]"
+              },
+              {
+                "active": [
+                  1
+                ],
+                "caption": "At each index, branch into include or exclude; each decision path is one subset.",
+                "state": "[1]"
+              },
+              {
+                "active": [
+                  2
+                ],
+                "caption": "Apply the same invariant to complete Subsets.",
+                "state": "[2]"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Permutations",
+          "difficulty": "Medium",
+          "number": 46,
+          "url": "https://leetcode.com/problems/permutations/",
+          "prompt": "Generate every ordering of distinct values.",
+          "why": "Choose one unused value for the next position, then backtrack.",
+          "visual": {
+            "items": [
+              "start",
+              "choose 1",
+              "choose 2",
+              "undo"
+            ],
+            "frames": [
+              {
+                "active": [
+                  0
+                ],
+                "caption": "Identify the state relevant to Permutations.",
+                "state": "[]"
+              },
+              {
+                "active": [
+                  1
+                ],
+                "caption": "Choose one unused value for the next position, then backtrack.",
+                "state": "[1]"
+              },
+              {
+                "active": [
+                  2
+                ],
+                "caption": "Apply the same invariant to complete Permutations.",
+                "state": "[2]"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Combination Sum",
+          "difficulty": "Medium",
+          "number": 39,
+          "url": "https://leetcode.com/problems/combination-sum/",
+          "prompt": "Find combinations that sum to a target.",
+          "why": "Reuse a candidate by recursing from its index; stop when the remaining target is negative.",
+          "visual": {
+            "items": [
+              "start",
+              "choose 1",
+              "choose 2",
+              "undo"
+            ],
+            "frames": [
+              {
+                "active": [
+                  0
+                ],
+                "caption": "Identify the state relevant to Combination Sum.",
+                "state": "[]"
+              },
+              {
+                "active": [
+                  1
+                ],
+                "caption": "Reuse a candidate by recursing from its index; stop when the remaining target is negative.",
+                "state": "[1]"
+              },
+              {
+                "active": [
+                  2
+                ],
+                "caption": "Apply the same invariant to complete Combination Sum.",
+                "state": "[2]"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "dynamic-programming",
+      "title": "Dynamic programming",
+      "subtitle": "Reuse answers to overlapping smaller subproblems.",
+      "summary": "Define the state and transition, then compute each needed subproblem once.",
+      "principles": [
+        "Write what dp[i] means in one sentence.",
+        "Derive a recurrence from the final decision.",
+        "Choose iteration order so dependencies are already solved."
+      ],
+      "conceptFrames": {
+        "items": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "frames": [
+          {
+            "active": [
+              0
+            ],
+            "caption": "Observe the current state: 0.",
+            "state": 0
+          },
+          {
+            "active": [
+              0,
+              1
+            ],
+            "caption": "Apply the pattern and update the stored state: 1.",
+            "state": 1
+          },
+          {
+            "active": [
+              0,
+              1,
+              2,
+              3,
+              4
+            ],
+            "caption": "The invariant leads to the result: 3.",
+            "state": 3
+          }
+        ]
+      },
+      "questions": [
+        {
+          "title": "Climbing Stairs",
+          "difficulty": "Easy",
+          "number": 70,
+          "url": "https://leetcode.com/problems/climbing-stairs/",
+          "prompt": "Count ways to reach the top taking one or two steps.",
+          "why": "Ways to reach i equals ways to reach i − 1 plus ways to reach i − 2.",
+          "visual": {
+            "items": [
+              0,
+              1,
+              2,
+              3,
+              4
+            ],
+            "frames": [
+              {
+                "active": [
+                  0
+                ],
+                "caption": "Identify the state relevant to Climbing Stairs.",
+                "state": 0
+              },
+              {
+                "active": [
+                  1
+                ],
+                "caption": "Ways to reach i equals ways to reach i − 1 plus ways to reach i − 2.",
+                "state": 1
+              },
+              {
+                "active": [
+                  2
+                ],
+                "caption": "Apply the same invariant to complete Climbing Stairs.",
+                "state": 3
+              }
+            ]
+          }
+        },
+        {
+          "title": "House Robber",
+          "difficulty": "Medium",
+          "number": 198,
+          "url": "https://leetcode.com/problems/house-robber/",
+          "prompt": "Maximize loot without taking adjacent houses.",
+          "why": "At each house, choose between skipping it or adding its value to the best two-back total.",
+          "visual": {
+            "items": [
+              0,
+              1,
+              2,
+              3,
+              4
+            ],
+            "frames": [
+              {
+                "active": [
+                  0
+                ],
+                "caption": "Identify the state relevant to House Robber.",
+                "state": 0
+              },
+              {
+                "active": [
+                  1
+                ],
+                "caption": "At each house, choose between skipping it or adding its value to the best two-back total.",
+                "state": 1
+              },
+              {
+                "active": [
+                  2
+                ],
+                "caption": "Apply the same invariant to complete House Robber.",
+                "state": 3
+              }
+            ]
+          }
+        },
+        {
+          "title": "Coin Change",
+          "difficulty": "Medium",
+          "number": 322,
+          "url": "https://leetcode.com/problems/coin-change/",
+          "prompt": "Find the fewest coins needed to make an amount.",
+          "why": "For each amount, try each coin and extend the best known smaller amount.",
+          "visual": {
+            "items": [
+              0,
+              1,
+              2,
+              3,
+              4
+            ],
+            "frames": [
+              {
+                "active": [
+                  0
+                ],
+                "caption": "Identify the state relevant to Coin Change.",
+                "state": 0
+              },
+              {
+                "active": [
+                  1
+                ],
+                "caption": "For each amount, try each coin and extend the best known smaller amount.",
+                "state": 1
+              },
+              {
+                "active": [
+                  2
+                ],
+                "caption": "Apply the same invariant to complete Coin Change.",
+                "state": 3
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "greedy-intervals",
+      "title": "Greedy intervals",
+      "subtitle": "Sort endpoints to make local choices safely.",
+      "summary": "For many interval problems, sorting by an endpoint makes each local decision preserve the most room for what follows.",
+      "principles": [
+        "Clarify whether touching intervals overlap.",
+        "For selecting intervals, earliest finishing time leaves most remaining space.",
+        "For merging, compare the next start with the current end."
+      ],
+      "conceptFrames": {
+        "items": [
+          [
+            1,
+            3
+          ],
+          [
+            2,
+            6
+          ],
+          [
+            8,
+            10
+          ],
+          [
+            15,
+            18
+          ]
+        ],
+        "frames": [
+          {
+            "active": [
+              0
+            ],
+            "caption": "Observe the current state: [1, 6].",
+            "state": [
+              1,
+              6
+            ]
+          },
+          {
+            "active": [
+              0,
+              1
+            ],
+            "caption": "Apply the pattern and update the stored state: [8, 10].",
+            "state": [
+              8,
+              10
+            ]
+          },
+          {
+            "active": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "caption": "The invariant leads to the result: [15, 18].",
+            "state": [
+              15,
+              18
+            ]
+          }
+        ]
+      },
+      "questions": [
+        {
+          "title": "Merge Intervals",
+          "difficulty": "Medium",
+          "number": 56,
+          "url": "https://leetcode.com/problems/merge-intervals/",
+          "prompt": "Merge all overlapping intervals.",
+          "why": "Sort by start and extend the current interval while the next one overlaps.",
+          "visual": {
+            "items": [
+              [
+                1,
+                3
+              ],
+              [
+                2,
+                6
+              ],
+              [
+                8,
+                10
+              ],
+              [
+                15,
+                18
+              ]
+            ],
+            "frames": [
+              {
+                "active": [
+                  0
+                ],
+                "caption": "Identify the state relevant to Merge Intervals.",
+                "state": [
+                  1,
+                  6
+                ]
+              },
+              {
+                "active": [
+                  1
+                ],
+                "caption": "Sort by start and extend the current interval while the next one overlaps.",
+                "state": [
+                  8,
+                  10
+                ]
+              },
+              {
+                "active": [
+                  2
+                ],
+                "caption": "Apply the same invariant to complete Merge Intervals.",
+                "state": [
+                  15,
+                  18
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "title": "Non-overlapping Intervals",
+          "difficulty": "Medium",
+          "number": 435,
+          "url": "https://leetcode.com/problems/non-overlapping-intervals/",
+          "prompt": "Remove the fewest intervals to eliminate overlap.",
+          "why": "Keep the interval that ends earliest whenever a conflict occurs.",
+          "visual": {
+            "items": [
+              [
+                1,
+                3
+              ],
+              [
+                2,
+                6
+              ],
+              [
+                8,
+                10
+              ],
+              [
+                15,
+                18
+              ]
+            ],
+            "frames": [
+              {
+                "active": [
+                  0
+                ],
+                "caption": "Identify the state relevant to Non-overlapping Intervals.",
+                "state": [
+                  1,
+                  6
+                ]
+              },
+              {
+                "active": [
+                  1
+                ],
+                "caption": "Keep the interval that ends earliest whenever a conflict occurs.",
+                "state": [
+                  8,
+                  10
+                ]
+              },
+              {
+                "active": [
+                  2
+                ],
+                "caption": "Apply the same invariant to complete Non-overlapping Intervals.",
+                "state": [
+                  15,
+                  18
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "title": "Jump Game",
+          "difficulty": "Medium",
+          "number": 55,
+          "url": "https://leetcode.com/problems/jump-game/",
+          "prompt": "Determine whether the last index is reachable.",
+          "why": "Track the farthest reachable index and stop if progress falls behind the current index.",
+          "visual": {
+            "items": [
+              [
+                1,
+                3
+              ],
+              [
+                2,
+                6
+              ],
+              [
+                8,
+                10
+              ],
+              [
+                15,
+                18
+              ]
+            ],
+            "frames": [
+              {
+                "active": [
+                  0
+                ],
+                "caption": "Identify the state relevant to Jump Game.",
+                "state": [
+                  1,
+                  6
+                ]
+              },
+              {
+                "active": [
+                  1
+                ],
+                "caption": "Track the farthest reachable index and stop if progress falls behind the current index.",
+                "state": [
+                  8,
+                  10
+                ]
+              },
+              {
+                "active": [
+                  2
+                ],
+                "caption": "Apply the same invariant to complete Jump Game.",
+                "state": [
+                  15,
+                  18
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "tries",
+      "title": "Tries and prefix search",
+      "subtitle": "Share prefixes across words for fast lookup.",
+      "summary": "A trie stores characters along paths, so common prefixes share nodes and prefix queries stop early.",
+      "principles": [
+        "Each edge represents a character.",
+        "Mark word endings separately from prefix nodes.",
+        "Use a child map when the alphabet is not fixed."
+      ],
+      "conceptFrames": {
+        "items": [
+          "c",
+          "a",
+          "t",
+          "r"
+        ],
+        "frames": [
+          {
+            "active": [
+              0
+            ],
+            "caption": "Observe the current state: c.",
+            "state": "c"
+          },
+          {
+            "active": [
+              0,
+              1
+            ],
+            "caption": "Apply the pattern and update the stored state: a.",
+            "state": "a"
+          },
+          {
+            "active": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "caption": "The invariant leads to the result: r.",
+            "state": "r"
+          }
+        ]
+      },
+      "questions": [
+        {
+          "title": "Implement Trie (Prefix Tree)",
+          "difficulty": "Medium",
+          "number": 208,
+          "url": "https://leetcode.com/problems/implement-trie-prefix-tree/",
+          "prompt": "Support insert, exact search, and prefix search.",
+          "why": "Follow one edge per character; distinguish a complete word from a shared prefix.",
+          "visual": {
+            "items": [
+              "c",
+              "a",
+              "t",
+              "r"
+            ],
+            "frames": [
+              {
+                "active": [
+                  0
+                ],
+                "caption": "Identify the state relevant to Implement Trie (Prefix Tree).",
+                "state": "c"
+              },
+              {
+                "active": [
+                  1
+                ],
+                "caption": "Follow one edge per character; distinguish a complete word from a shared prefix.",
+                "state": "a"
+              },
+              {
+                "active": [
+                  2
+                ],
+                "caption": "Apply the same invariant to complete Implement Trie (Prefix Tree).",
+                "state": "r"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Word Search II",
+          "difficulty": "Hard",
+          "number": 212,
+          "url": "https://leetcode.com/problems/word-search-ii/",
+          "prompt": "Find dictionary words in a character grid.",
+          "why": "A trie lets each grid path prune itself as soon as its prefix is absent.",
+          "visual": {
+            "items": [
+              "c",
+              "a",
+              "t",
+              "r"
+            ],
+            "frames": [
+              {
+                "active": [
+                  0
+                ],
+                "caption": "Identify the state relevant to Word Search II.",
+                "state": "c"
+              },
+              {
+                "active": [
+                  1
+                ],
+                "caption": "A trie lets each grid path prune itself as soon as its prefix is absent.",
+                "state": "a"
+              },
+              {
+                "active": [
+                  2
+                ],
+                "caption": "Apply the same invariant to complete Word Search II.",
+                "state": "r"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Replace Words",
+          "difficulty": "Medium",
+          "number": 648,
+          "url": "https://leetcode.com/problems/replace-words/",
+          "prompt": "Replace words with their shortest dictionary root.",
+          "why": "Walk the trie and stop at the first terminal node to get the shortest root.",
+          "visual": {
+            "items": [
+              "c",
+              "a",
+              "t",
+              "r"
+            ],
+            "frames": [
+              {
+                "active": [
+                  0
+                ],
+                "caption": "Identify the state relevant to Replace Words.",
+                "state": "c"
+              },
+              {
+                "active": [
+                  1
+                ],
+                "caption": "Walk the trie and stop at the first terminal node to get the shortest root.",
+                "state": "a"
+              },
+              {
+                "active": [
+                  2
+                ],
+                "caption": "Apply the same invariant to complete Replace Words.",
+                "state": "r"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "union-find",
+      "title": "Union find",
+      "subtitle": "Maintain connected components as edges arrive.",
+      "summary": "Disjoint-set union answers connectivity queries efficiently by joining component roots.",
+      "principles": [
+        "Find each node’s representative root.",
+        "Union roots only when they differ.",
+        "Path compression and union by size keep operations nearly constant time."
+      ],
+      "conceptFrames": {
+        "items": [
+          "0—1",
+          "1—2",
+          "3—4",
+          "2—3"
+        ],
+        "frames": [
+          {
+            "active": [
+              0
+            ],
+            "caption": "Observe the current state: {0,1,2,3,4}.",
+            "state": "{0,1,2,3,4}"
+          },
+          {
+            "active": [
+              0,
+              1
+            ],
+            "caption": "Apply the pattern and update the stored state: {0,1,2,3,4}.",
+            "state": "{0,1,2,3,4}"
+          },
+          {
+            "active": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "caption": "The invariant leads to the result: {0,1,2,3,4}.",
+            "state": "{0,1,2,3,4}"
+          }
+        ]
+      },
+      "questions": [
+        {
+          "title": "Number of Provinces",
+          "difficulty": "Medium",
+          "number": 547,
+          "url": "https://leetcode.com/problems/number-of-provinces/",
+          "prompt": "Count connected groups in an adjacency matrix.",
+          "why": "Union directly connected cities; the remaining roots are provinces.",
+          "visual": {
+            "items": [
+              "0—1",
+              "1—2",
+              "3—4",
+              "2—3"
+            ],
+            "frames": [
+              {
+                "active": [
+                  0
+                ],
+                "caption": "Identify the state relevant to Number of Provinces.",
+                "state": "{0,1,2,3,4}"
+              },
+              {
+                "active": [
+                  1
+                ],
+                "caption": "Union directly connected cities; the remaining roots are provinces.",
+                "state": "{0,1,2,3,4}"
+              },
+              {
+                "active": [
+                  2
+                ],
+                "caption": "Apply the same invariant to complete Number of Provinces.",
+                "state": "{0,1,2,3,4}"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Redundant Connection",
+          "difficulty": "Medium",
+          "number": 684,
+          "url": "https://leetcode.com/problems/redundant-connection/",
+          "prompt": "Find the edge that creates a cycle in a tree plus one edge.",
+          "why": "An edge is redundant when its endpoints already have the same representative.",
+          "visual": {
+            "items": [
+              "0—1",
+              "1—2",
+              "3—4",
+              "2—3"
+            ],
+            "frames": [
+              {
+                "active": [
+                  0
+                ],
+                "caption": "Identify the state relevant to Redundant Connection.",
+                "state": "{0,1,2,3,4}"
+              },
+              {
+                "active": [
+                  1
+                ],
+                "caption": "An edge is redundant when its endpoints already have the same representative.",
+                "state": "{0,1,2,3,4}"
+              },
+              {
+                "active": [
+                  2
+                ],
+                "caption": "Apply the same invariant to complete Redundant Connection.",
+                "state": "{0,1,2,3,4}"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Accounts Merge",
+          "difficulty": "Medium",
+          "number": 721,
+          "url": "https://leetcode.com/problems/accounts-merge/",
+          "prompt": "Combine accounts that share an email.",
+          "why": "Union accounts through their email ownership, then group emails by root.",
+          "visual": {
+            "items": [
+              "0—1",
+              "1—2",
+              "3—4",
+              "2—3"
+            ],
+            "frames": [
+              {
+                "active": [
+                  0
+                ],
+                "caption": "Identify the state relevant to Accounts Merge.",
+                "state": "{0,1,2,3,4}"
+              },
+              {
+                "active": [
+                  1
+                ],
+                "caption": "Union accounts through their email ownership, then group emails by root.",
+                "state": "{0,1,2,3,4}"
+              },
+              {
+                "active": [
+                  2
+                ],
+                "caption": "Apply the same invariant to complete Accounts Merge.",
+                "state": "{0,1,2,3,4}"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "monotonic-stack",
+      "title": "Monotonic stack",
+      "subtitle": "Keep unresolved values ordered until a new value answers them.",
+      "summary": "A monotonic stack stores indices in increasing or decreasing value order. When a new item breaks that order, pop the items it resolves; this turns repeated scans for a previous or next boundary into a linear pass.",
+      "principles": [
+        "Choose increasing or decreasing order from the boundary the problem asks for.",
+        "Store indices when widths or distances matter; store values only when position is irrelevant.",
+        "Write down what becomes known when an item is popped.",
+        "Each item is pushed and popped at most once, so the full scan is O(n)."
+      ],
+      "conceptFrames": {
+        "items": [
+          2,
+          1,
+          2,
+          4,
+          3
+        ],
+        "frames": [
+          {
+            "active": [
+              0
+            ],
+            "caption": "Index 0 has no unresolved larger value yet, so keep its index on the stack.",
+            "state": "stack = [0] · values [2]"
+          },
+          {
+            "active": [
+              0,
+              1
+            ],
+            "caption": "The values decrease from bottom to top. Index 1 waits for the first larger value to its right.",
+            "state": "stack = [0, 1] · values [2, 1]"
+          },
+          {
+            "active": [
+              1,
+              2
+            ],
+            "caption": "Value 2 resolves the waiting 1. Pop index 1, record 1 → 2, then push index 2.",
+            "state": "next greater: 1 → 2 · stack = [0, 2]",
+            "pivot": 2
+          },
+          {
+            "active": [
+              0,
+              2,
+              3
+            ],
+            "caption": "Value 4 resolves both remaining smaller values. Each popped index now has its next greater answer.",
+            "state": "2 → 4, 2 → 4 · stack = [3]",
+            "pivot": 3
+          },
+          {
+            "active": [
+              3,
+              4
+            ],
+            "caption": "Value 3 cannot resolve 4, so it waits beneath it. Each index is pushed and popped at most once.",
+            "state": "stack = [3, 4] · O(n) total",
+            "pivot": 4
+          }
+        ]
+      },
+      "questions": [
+        {
+          "title": "Next Greater Element I",
+          "difficulty": "Easy",
+          "number": 496,
+          "url": "https://leetcode.com/problems/next-greater-element-i/",
+          "prompt": "For each queried value, find the first greater value to its right.",
+          "why": "Keep unresolved values in a decreasing stack. A new larger value resolves every smaller value at the top.",
+          "visual": {
+            "items": [
+              1,
+              3,
+              4,
+              2
+            ],
+            "frames": [
+              {
+                "active": [
+                  0
+                ],
+                "caption": "1 has no greater value yet; keep its index pending.",
+                "state": "stack = [1]"
+              },
+              {
+                "active": [
+                  0,
+                  1
+                ],
+                "caption": "3 is greater than 1, so answer 1 → 3; then 3 waits.",
+                "state": "answer 1 = 3 · stack = [3]"
+              },
+              {
+                "active": [
+                  2,
+                  3
+                ],
+                "caption": "4 resolves 3; 2 later waits because 4 is larger.",
+                "state": "answer 3 = 4 · 2 → -1"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Largest Rectangle in Histogram",
+          "difficulty": "Hard",
+          "number": 84,
+          "url": "https://leetcode.com/problems/largest-rectangle-in-histogram/",
+          "prompt": "Find the largest rectangle that fits under the histogram bars.",
+          "why": "When a shorter bar arrives, it closes taller bars; the current index gives their right boundary and the remaining stack gives their left boundary.",
+          "visual": {
+            "items": [
+              2,
+              1,
+              5,
+              6,
+              2,
+              3
+            ],
+            "frames": [
+              {
+                "active": [
+                  0,
+                  1
+                ],
+                "caption": "Height 1 closes height 2. Its width is 1, area 2.",
+                "state": "height 2 · area 2"
+              },
+              {
+                "active": [
+                  2,
+                  3
+                ],
+                "caption": "5 then 6 rise, so keep both unresolved.",
+                "state": "increasing heights wait"
+              },
+              {
+                "active": [
+                  2,
+                  3,
+                  4
+                ],
+                "caption": "Height 2 closes 6 (area 6), then 5 (area 10 across width 2).",
+                "state": "best area = 10"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Trapping Rain Water",
+          "difficulty": "Hard",
+          "number": 42,
+          "url": "https://leetcode.com/problems/trapping-rain-water/",
+          "prompt": "Compute how much water is held between elevation bars.",
+          "why": "When a right wall rises above a valley, the popped bar is the basin bottom; the new stack top is its left wall.",
+          "visual": {
+            "items": [
+              4,
+              2,
+              0,
+              3,
+              2,
+              5
+            ],
+            "frames": [
+              {
+                "active": [
+                  0,
+                  1,
+                  2
+                ],
+                "caption": "The bars 2 and 0 wait for a right boundary.",
+                "state": "stack = [0, 1, 2]"
+              },
+              {
+                "active": [
+                  1,
+                  2,
+                  3
+                ],
+                "caption": "Height 3 closes the valley at 0: bounded by height 2 and 3, width 1, water 2.",
+                "state": "water += 2"
+              },
+              {
+                "active": [
+                  0,
+                  1,
+                  2,
+                  3,
+                  4,
+                  5
+                ],
+                "caption": "Height 5 closes remaining basins; total trapped water is 9.",
+                "state": "total = 9"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
