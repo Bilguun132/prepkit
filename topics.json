@@ -2778,6 +2778,220 @@
           }
         }
       ]
+    },
+    {
+      "id": "bit-manipulation",
+      "title": "Bit manipulation",
+      "subtitle": "Work directly with the binary representation of values.",
+      "summary": "Bitwise operators let you test, toggle, combine, and clear individual bits. XOR cancels equal pairs; AND with a mask tests a bit; shifts move a bit to a chosen position. These patterns often reduce extra space or repeated work.",
+      "principles": [
+        "Write a small binary example before applying an operator.",
+        "Use AND with a mask to test bits and OR to turn selected bits on.",
+        "XOR is useful when equal values cancel in pairs.",
+        "For a positive integer, n & (n − 1) clears its lowest set bit."
+      ],
+      "conceptFrames": {
+        "items": [
+          "b3",
+          "b2",
+          "b1",
+          "b0"
+        ],
+        "frames": [
+          {
+            "active": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "caption": "XOR compares corresponding bits: equal bits produce 0, different bits produce 1.",
+            "state": "1011 ⊕ 0110 = 1101"
+          },
+          {
+            "active": [
+              2
+            ],
+            "caption": "A mask with one bit set isolates that position with AND.",
+            "state": "1011 & 0100 = 0000 · bit 2 is clear"
+          },
+          {
+            "active": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "caption": "Subtracting one flips the lowest set bit and the trailing zeros; AND keeps the rest.",
+            "state": "1011000 & 1010111 = 1010000"
+          },
+          {
+            "active": [
+              0,
+              2,
+              3
+            ],
+            "caption": "The same operator rules combine to cancel pairs, count set bits, or build compact state masks.",
+            "state": "Each operation is constant time for a fixed-width integer"
+          }
+        ]
+      },
+      "questions": [
+        {
+          "title": "Single Number",
+          "difficulty": "Easy",
+          "number": 136,
+          "url": "https://leetcode.com/problems/single-number/",
+          "prompt": "Every value appears twice except one. Find the value that appears once using constant extra space.",
+          "why": "XOR is associative, x ⊕ x = 0, and x ⊕ 0 = x. Repeated pairs cancel regardless of order.",
+          "visual": {
+            "items": [
+              4,
+              1,
+              2,
+              1,
+              2
+            ],
+            "frames": [
+              {
+                "active": [
+                  0
+                ],
+                "caption": "Start with zero; XOR it with the first value.",
+                "state": "result = 0 ⊕ 4 = 4"
+              },
+              {
+                "active": [
+                  0,
+                  1
+                ],
+                "caption": "XOR in 1; no pair has cancelled yet.",
+                "state": "result = 4 ⊕ 1 = 5"
+              },
+              {
+                "active": [
+                  0,
+                  1,
+                  2
+                ],
+                "caption": "XOR in 2, then its later duplicate will cancel it.",
+                "state": "result = 5 ⊕ 2 = 7"
+              },
+              {
+                "active": [
+                  1,
+                  2,
+                  3,
+                  4
+                ],
+                "caption": "The pair of 1s cancels to zero; then the pair of 2s cancels too.",
+                "state": "4 ⊕ 1 ⊕ 2 ⊕ 1 ⊕ 2 = 4"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Number of 1 Bits",
+          "difficulty": "Easy",
+          "number": 191,
+          "url": "https://leetcode.com/problems/number-of-1-bits/",
+          "prompt": "Return the number of set bits in a positive integer.",
+          "why": "Repeatedly apply n & (n − 1); each operation removes exactly the lowest set bit, so the loop runs once per 1-bit.",
+          "visual": {
+            "items": [
+              "b3",
+              "b2",
+              "b1",
+              "b0"
+            ],
+            "frames": [
+              {
+                "active": [
+                  0,
+                  1,
+                  3
+                ],
+                "caption": "11 in binary has three set bits. Clear the rightmost one.",
+                "state": "1011 → 1010 · count = 1"
+              },
+              {
+                "active": [
+                  0,
+                  1
+                ],
+                "caption": "Clear the next lowest set bit.",
+                "state": "1010 → 1000 · count = 2"
+              },
+              {
+                "active": [
+                  0
+                ],
+                "caption": "Clear the last set bit.",
+                "state": "1000 → 0000 · count = 3"
+              },
+              {
+                "active": [],
+                "caption": "No set bits remain, so the number of iterations is the answer.",
+                "state": "answer = 3"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Counting Bits",
+          "difficulty": "Easy",
+          "number": 338,
+          "url": "https://leetcode.com/problems/counting-bits/",
+          "prompt": "For every integer from 0 through n, return how many 1-bits it contains.",
+          "why": "The count for i is the count for i >> 1 plus i & 1. The smaller value is already computed, giving a linear dynamic program.",
+          "visual": {
+            "items": [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5
+            ],
+            "frames": [
+              {
+                "active": [
+                  0,
+                  1
+                ],
+                "caption": "0 has no set bits; 1 adds its low bit to the count for 0.",
+                "state": "counts: [0, 1]"
+              },
+              {
+                "active": [
+                  1,
+                  2
+                ],
+                "caption": "2 is 10₂, so it has the same count as 1 after shifting right.",
+                "state": "dp[2] = dp[1] + 0 = 1"
+              },
+              {
+                "active": [
+                  2,
+                  3
+                ],
+                "caption": "3 is odd, so add its low bit to the count for 1.",
+                "state": "dp[3] = dp[1] + 1 = 2"
+              },
+              {
+                "active": [
+                  2,
+                  3,
+                  4,
+                  5
+                ],
+                "caption": "4 reuses dp[2]; 5 reuses dp[2] and adds one for its low bit.",
+                "state": "counts: [0, 1, 1, 2, 1, 2]"
+              }
+            ]
+          }
+        }
+      ]
     }
   ]
 }

@@ -356,6 +356,27 @@
           "body": "Require HTTPS, validate endpoint ownership at registration, block private and link-local address ranges to reduce SSRF risk, and recheck DNS/redirect destinations. Keep signing secrets in a secret manager and support rotation. Encrypt stored payloads, apply tenant-scoped access checks, and set retention limits. Track queue age, delivery latency and success by tenant, retry rate, dead-letter count, and worker saturation; alert on growing oldest-message age. Partitioning by endpoint preserves local ordering and fair throttling but creates hot partitions; shard oversized endpoints and relax order only when the contract allows. Keep the event log durable, scale consumers horizontally, and make outbox publishing and state transitions idempotent."
         }
       ]
+    },
+    "payment-processing": {
+      "intro": "Treat the payment lifecycle as a durable state machine backed by an immutable ledger. Make idempotency explicit at both the merchant API and the provider boundary. A timeout is an unknown outcome, not proof that the provider did nothing.",
+      "sections": [
+        {
+          "title": "Requirements, API, and scale",
+          "body": "Clarify whether the first version supports authorization and later capture, immediate capture, refunds, and multiple currencies. Offer POST /v1/payment-intents with a merchant idempotency key, POST /v1/payment-intents/{id}/confirm, POST /v1/payment-intents/{id}/capture, POST /v1/refunds, and GET /v1/payment-intents/{id}. At 50M attempts/day, average load is about 580/s; size the write path for the stated 10K/s peak. At 2 KB per request/event, ingress is roughly 20 MB/s at peak before replication and callbacks."
+        },
+        {
+          "title": "Data model and high-level design",
+          "body": "Store PaymentIntent (merchant, amount, currency, state, version), IdempotencyRecord (merchant, key, request hash, response), ProviderAttempt (provider reference, attempt number, outcome), LedgerTransaction and immutable LedgerEntry rows, plus ReconciliationRecord. The API gateway authenticates merchant requests. An orchestration service validates amounts and transitions the intent with a conditional version update. In one database transaction it stores the state and an outbox event. A publisher puts the event on a durable queue; provider workers tokenize payment details and call an acquirer using a stable provider idempotency key. Signed provider callbacks enter a separate callback API, are deduplicated, and advance the state machine. The ledger service records balanced debit/credit entries atomically when an authorization, capture, refund, or settlement is recognized."
+        },
+        {
+          "title": "Correctness under retries and timeouts",
+          "body": "A unique constraint on (merchant_id, idempotency_key) returns the original result for a repeated request; reject reuse with a different request hash. Process queue messages and callbacks idempotently using stable event IDs. If a provider request times out after submission, mark the attempt outcome unknown, query the provider by its idempotency/reference key, and wait for callbacks or reconciliation before issuing another charge. Do not claim exactly-once effects across the provider boundary. Model explicit states such as requires_confirmation, processing, authorized, captured, declined, refund_pending, and refunded; allow only legal conditional transitions."
+        },
+        {
+          "title": "Security, availability, and reconciliation",
+          "body": "Use a token vault so card numbers do not enter ordinary service logs or databases; encrypt sensitive tokens and scope access. Verify callback signatures and timestamps. Partition intents and ledger queries by merchant/account, but keep each ledger transaction atomic. Apply provider-specific timeouts, circuit breakers, and bounded retry with jitter. A scheduled reconciliation job compares provider settlement reports with internal attempts and ledger entries, records discrepancies, and routes them for repair without mutating the audit trail. Monitor unknown outcomes, duplicate requests, callback lag, authorization rate, reconciliation gaps, and queue age. Prefer returning a pending state over risking a duplicate charge during an outage."
+        }
+      ]
     }
   },
   "systems": [
@@ -589,6 +610,21 @@
         "Draw the flow: authenticated ingestion → durable event log → subscription fan-out → fair per-endpoint queues → delivery workers → customer endpoint; persist attempts and status.",
         "Deep-dive on retries, exponential backoff with jitter, dead-lettering, replay, signature verification, tenant fairness, endpoint timeouts, and per-destination concurrency limits.",
         "Explain tradeoffs: at-least-once means duplicates, so stable delivery IDs and receiver idempotency matter; strict ordering reduces parallelism; partition by endpoint when per-endpoint order is required."
+      ]
+    },
+    {
+      "id": "payment-processing",
+      "title": "Design a payment processing platform",
+      "topic": "Financial systems",
+      "tag": "Consistency and reliability",
+      "scenario": "Design a multi-region payment service for online merchants. Merchants create payment intents, customers confirm card payments, and merchants can capture, refund, and query transactions. Assume about 50 million payment attempts per day with peaks near 10,000 requests per second. The system must avoid duplicate charges, retain an auditable financial record, and recover safely when an external payment provider times out or returns delayed updates.",
+      "guide": [
+        "Clarify authorization versus capture, partial capture/refund, supported payment methods, latency targets, availability, and merchant-visible states.",
+        "Estimate average volume: 50M attempts/day is about 580 per second; design for the stated 10K peak. If each persisted request/event averages 2 KB, peak raw ingress is about 20 MB/s before replication and provider callbacks.",
+        "Define merchant APIs and entities: payment intent, idempotency key, provider attempt, append-only ledger entry, and reconciliation record.",
+        "Draw the request path from authenticated API to idempotency check, durable state machine, transactional outbox, queue, provider connector, callback intake, and ledger posting.",
+        "Deep-dive on ambiguous timeouts, duplicate requests, asynchronous callbacks, ledger atomicity, provider outages, reconciliation, tokenization, and data retention.",
+        "Explain the delivery guarantee and tradeoffs: asynchronous processing improves resilience, but status may be pending; provider calls cannot share an atomic transaction with the local database, so idempotency and reconciliation are essential."
       ]
     }
   ],
