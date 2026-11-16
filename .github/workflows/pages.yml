@@ -29,6 +29,7 @@ jobs:
         run: |
           mkdir _site
           cp index.html app.js styles.css content.json topics.json _site/
+          printf '{"lastUpdated":"%s"}\n' "$(git log -1 --format=%cI)" > _site/build-info.json
           touch _site/.nojekyll
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
