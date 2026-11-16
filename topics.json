@@ -2992,6 +2992,214 @@
           }
         }
       ]
+    },
+    {
+      "id": "topological-sort",
+      "title": "Topological sort",
+      "subtitle": "Order dependent tasks by repeatedly removing work with no prerequisites.",
+      "summary": "A topological ordering places every directed edge u → v with u before v. Kahn’s algorithm tracks each node’s incoming-edge count, queues the nodes with zero prerequisites, and reduces the count of their dependents as it processes them. If fewer than all nodes are processed, a cycle prevents a valid ordering.",
+      "principles": [
+        "Model each prerequisite as a directed edge from prerequisite to dependent task.",
+        "Initialize indegree from incoming edges and enqueue every zero-indegree node.",
+        "When removing a node, decrement each neighbor’s indegree and enqueue it exactly when that count reaches zero.",
+        "A valid order contains every node; if the processed count is smaller, the graph has a cycle.",
+        "Adjacency lists make the algorithm O(V + E) in time and space."
+      ],
+      "conceptFrames": {
+        "items": [
+          "A",
+          "B",
+          "C",
+          "D"
+        ],
+        "frames": [
+          {
+            "active": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "caption": "A and B are prerequisites for C, and C is a prerequisite for D. Count each incoming edge.",
+            "state": "indegree = [0, 0, 2, 1] · edges A→C, B→C, C→D"
+          },
+          {
+            "active": [
+              0,
+              1
+            ],
+            "caption": "Only A and B have no unmet prerequisites, so both can begin the ordering.",
+            "state": "ready queue = [A, B] · order = []"
+          },
+          {
+            "active": [
+              0,
+              2
+            ],
+            "caption": "Remove A. C still has one prerequisite, so it is not ready yet.",
+            "state": "order = [A] · indegree(C) = 1"
+          },
+          {
+            "active": [
+              1,
+              2
+            ],
+            "caption": "Remove B. C now has no remaining prerequisites and joins the queue.",
+            "state": "order = [A, B] · ready queue = [C]"
+          },
+          {
+            "active": [
+              2,
+              3
+            ],
+            "caption": "Removing C unlocks D. Processing every node proves the graph is acyclic.",
+            "state": "order = [A, B, C, D] · O(V + E)"
+          }
+        ]
+      },
+      "questions": [
+        {
+          "title": "Course Schedule",
+          "difficulty": "Medium",
+          "number": 207,
+          "url": "https://leetcode.com/problems/course-schedule/",
+          "prompt": "Decide whether all courses can be completed given prerequisite pairs.",
+          "why": "Build prerequisite edges and run Kahn’s algorithm. If the processed node count equals the number of courses, no prerequisite cycle blocks completion.",
+          "visual": {
+            "items": [
+              "0",
+              "1",
+              "2",
+              "3"
+            ],
+            "frames": [
+              {
+                "active": [
+                  0,
+                  1,
+                  2,
+                  3
+                ],
+                "caption": "Prerequisites 0→1, 1→2, and 2→1 leave 1 and 2 in a cycle.",
+                "state": "indegree = [0, 2, 1, 0]"
+              },
+              {
+                "active": [
+                  0,
+                  3
+                ],
+                "caption": "Courses 0 and 3 are initially available; processing them cannot unlock the cycle.",
+                "state": "processed = 2 of 4"
+              },
+              {
+                "active": [
+                  1,
+                  2
+                ],
+                "caption": "The queue is empty while two courses remain, so those courses cannot be completed.",
+                "state": "processed < courses · return false"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Course Schedule II",
+          "difficulty": "Medium",
+          "number": 210,
+          "url": "https://leetcode.com/problems/course-schedule-ii/",
+          "prompt": "Return one valid order in which to take all courses, or an empty list if impossible.",
+          "why": "Append a course to the answer when it leaves the zero-indegree queue. The final list is valid exactly when it contains every course.",
+          "visual": {
+            "items": [
+              "0",
+              "1",
+              "2",
+              "3"
+            ],
+            "frames": [
+              {
+                "active": [
+                  0,
+                  1
+                ],
+                "caption": "Courses 0 and 1 have no prerequisites; either may appear first.",
+                "state": "queue = [0, 1]"
+              },
+              {
+                "active": [
+                  0,
+                  2
+                ],
+                "caption": "Take 0. Its outgoing prerequisite edge reduces course 2’s indegree.",
+                "state": "order = [0]"
+              },
+              {
+                "active": [
+                  1,
+                  2,
+                  3
+                ],
+                "caption": "Take 1; now 2 is unlocked. Completing 2 later unlocks 3.",
+                "state": "order = [0, 1, 2, 3]"
+              },
+              {
+                "active": [
+                  0,
+                  1,
+                  2,
+                  3
+                ],
+                "caption": "Every course appears once and each prerequisite precedes its dependent course.",
+                "state": "valid order · O(V + E)"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Find All Possible Recipes from Given Supplies",
+          "difficulty": "Medium",
+          "number": 2115,
+          "url": "https://leetcode.com/problems/find-all-possible-recipes-from-given-supplies/",
+          "prompt": "Find each recipe that can be produced from the initial supplies and other producible recipes.",
+          "why": "Treat each ingredient as a prerequisite for its recipe. Start with available supplies; when an ingredient becomes available, decrement the dependent recipe counts and enqueue newly unlocked recipes.",
+          "visual": {
+            "items": [
+              "yeast",
+              "flour",
+              "bread",
+              "ham",
+              "sandwich"
+            ],
+            "frames": [
+              {
+                "active": [
+                  1
+                ],
+                "caption": "Flour is already available, so it satisfies one dependency of bread.",
+                "state": "bread remaining ingredients = 1"
+              },
+              {
+                "active": [
+                  0,
+                  1,
+                  2
+                ],
+                "caption": "Yeast is also supplied; bread reaches zero missing ingredients and becomes available.",
+                "state": "available = {flour, yeast, bread}"
+              },
+              {
+                "active": [
+                  2,
+                  3,
+                  4
+                ],
+                "caption": "Bread and ham satisfy the sandwich recipe, unlocking it in turn.",
+                "state": "recipes = [bread, sandwich]"
+              }
+            ]
+          }
+        }
+      ]
     }
   ]
 }

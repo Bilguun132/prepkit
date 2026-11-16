@@ -377,6 +377,27 @@
           "body": "Use a token vault so card numbers do not enter ordinary service logs or databases; encrypt sensitive tokens and scope access. Verify callback signatures and timestamps. Partition intents and ledger queries by merchant/account, but keep each ledger transaction atomic. Apply provider-specific timeouts, circuit breakers, and bounded retry with jitter. A scheduled reconciliation job compares provider settlement reports with internal attempts and ledger entries, records discrepancies, and routes them for repair without mutating the audit trail. Monitor unknown outcomes, duplicate requests, callback lag, authorization rate, reconciliation gaps, and queue age. Prefer returning a pending state over risking a duplicate charge during an outage."
         }
       ]
+    },
+    "feature-flag-platform": {
+      "intro": "Separate configuration authoring from evaluation. Keep evaluations in the client or regional data plane, and distribute immutable, versioned configuration snapshots. Define the freshness guarantee for kill switches and show how clients behave when they cannot fetch a new version.",
+      "sections": [
+        {
+          "title": "Requirements, APIs, and scale",
+          "body": "Confirm flag types (boolean, string, numeric), rule operators, user and device attributes, environment separation, SDK languages, server-side evaluation, audit and rollback needs, and target propagation time for emergency disables. At 2M evaluations/s, a central request per evaluation is an avoidable bottleneck; SDKs can perform local evaluation from cached rules in under 5 ms. The control plane handles far fewer writes, so size its database and distribution pipeline separately. A server-side POST /v1/evaluate endpoint remains available for clients that cannot safely evaluate locally. Admin APIs create and version flags and rules; GET /v1/config/{environment} returns a signed snapshot and version."
+        },
+        {
+          "title": "Data model and high-level design",
+          "body": "Store Flag(tenant_id, environment_id, key, type, default_value, enabled, version), ordered Rule(flag_key, priority, predicate, variant), Segment(tenant_id, key, version, membership_source), and append-only AuditEvent(actor, change, timestamp). The admin API validates permissions and rule syntax, then writes configuration plus an outbox event in one relational transaction. A compiler produces a normalized, signed snapshot with a monotonically increasing environment version. A durable change stream feeds regional distribution services; edge endpoints expose the newest snapshot through long polling or server-sent events, with periodic full snapshot fetches as repair. SDKs verify signatures, atomically swap snapshots, and evaluate deterministically in memory. Evaluation telemetry is buffered and sampled asynchronously."
+        },
+        {
+          "title": "Evaluation, rollout, and propagation",
+          "body": "Evaluate rules in explicit priority order, then fall back to the flag default. For percentage rollouts, hash a stable tuple such as tenant, flag key, and user key into a fixed bucket range; this prevents a user from randomly changing variants between requests. Validate percentage boundaries and rule syntax before publication. Every update increments a version. SDKs report their applied version and heartbeat; the console shows lagging regions and clients. For kill switches, prioritize the delta stream, use short polling intervals for active SDKs, and provide push notification where available. Mobile SDKs cannot promise immediate receipt while suspended, so state that the latest known configuration is used until reconnect."
+        },
+        {
+          "title": "Reliability, security, and tradeoffs",
+          "body": "Keep the last valid snapshot in durable local storage and continue evaluating it during a control-plane outage; apply a configured maximum staleness policy and expose stale state to the host application. If a signature fails or a snapshot is malformed, reject it and retain the prior version. Enforce tenant-scoped authorization on writes, encrypt secrets, and avoid placing sensitive targeting attributes in telemetry. Use idempotent versioned updates, audit all edits, and support rollback by publishing a prior logical configuration as a new version. Local evaluation gives low latency and avoids a central hot path, at the cost of delayed revocation and rules being distributed to clients. Server-side evaluation protects rule confidentiality but adds network latency and service load; support both with an explicit policy."
+        }
+      ]
     }
   },
   "systems": [
@@ -625,6 +646,21 @@
         "Draw the request path from authenticated API to idempotency check, durable state machine, transactional outbox, queue, provider connector, callback intake, and ledger posting.",
         "Deep-dive on ambiguous timeouts, duplicate requests, asynchronous callbacks, ledger atomicity, provider outages, reconciliation, tokenization, and data retention.",
         "Explain the delivery guarantee and tradeoffs: asynchronous processing improves resilience, but status may be pending; provider calls cannot share an atomic transaction with the local database, so idempotency and reconciliation are essential."
+      ]
+    },
+    {
+      "id": "feature-flag-platform",
+      "title": "Design a feature flag and remote configuration platform",
+      "topic": "Configuration and control planes",
+      "tag": "Low-latency reads and safe propagation",
+      "scenario": "Design a multi-tenant feature flag service used by web and mobile applications. Teams create flags, define rules by user attributes or percentage rollout, and evaluate flags in SDKs or through a server API. Support 100,000 customer applications and up to 2 million evaluations per second globally. Most evaluation must remain local and finish in under 5 ms; a kill switch should reach active clients quickly. Config changes need auditability, tenant isolation, and safe behavior during network or control-plane outages.",
+      "guide": [
+        "Clarify flag types, targeting operators, user identity, environments, SDK languages, evaluation placement, kill-switch propagation target, audit retention, and what clients should do with stale configuration.",
+        "Estimate which work is on the hot path: 2M evaluations/s globally is too expensive for a synchronous central service, so push signed configuration snapshots to regional edge endpoints and evaluate in SDK memory. Estimate control-plane writes separately; assume configuration changes are rare compared with evaluations.",
+        "Define APIs such as POST /v1/flags, PATCH /v1/flags/{key}, POST /v1/flags/{key}/rules, GET /v1/config/{environment}, and POST /v1/evaluate for server-side use. Model Flag, Rule, Segment, Environment, ConfigVersion, and AuditEvent with tenant and environment keys.",
+        "Draw the control plane from authenticated admin API to relational metadata store, transactional outbox, validation/compiler, and durable change stream. Draw the data plane from regional distribution endpoints to SDK caches that evaluate locally.",
+        "Deep-dive on percentage rollout stability, rule ordering, cache invalidation, mobile clients that sleep, kill-switch propagation, stale config, tenant boundaries, and configuration rollback.",
+        "Discuss consistency and resilience tradeoffs: asynchronous fanout gives fast local reads and tolerates network partitions, but propagation is not instantaneous. Versioned snapshots, expiry, acknowledgements, and visible propagation status make that limitation measurable."
       ]
     }
   ],
