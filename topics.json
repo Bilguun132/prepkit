@@ -3200,6 +3200,239 @@
           }
         }
       ]
+    },
+    {
+      "id": "dijkstra-shortest-paths",
+      "title": "Dijkstra and weighted paths",
+      "subtitle": "Expand the best known route first and relax its outgoing edges.",
+      "summary": "For nonnegative edge weights, Dijkstra’s algorithm settles the smallest tentative distance first. Relaxing an edge means replacing a neighbor’s distance when the route through the current node is better. A priority queue selects the next candidate; stale entries are skipped. Unlike ordinary BFS, this handles edges with different costs.",
+      "principles": [
+        "Initialize the source distance to zero and all others to infinity; push (0, source) into a min-heap.",
+        "Pop the smallest candidate. Skip it if its cost is larger than the node’s best recorded distance.",
+        "Relax each outgoing edge with candidate = distance + weight; push only strict improvements.",
+        "A target can be returned when popped with its current best distance, not when first discovered. Negative edges invalidate the settling argument.",
+        "With lazy heap entries, the general bound is O((V + E) log(V + E)) time and O(V + E) space. Other monotone path objectives can use the same best-first structure."
+      ],
+      "conceptFrames": {
+        "items": [
+          "S",
+          "A",
+          "B",
+          "T"
+        ],
+        "frames": [
+          {
+            "active": [
+              0
+            ],
+            "caption": "Start at S. Edges are S→A:4, S→B:1, B→A:2, A→T:1, B→T:7.",
+            "state": "dist = [0, ∞, ∞, ∞] · heap = [(0,S)]"
+          },
+          {
+            "active": [
+              0,
+              1,
+              2
+            ],
+            "caption": "Set tentative distances from S; B is cheaper and will be popped first.",
+            "state": "dist = [0, 4, 1, ∞] · heap = [(1,B),(4,A)]"
+          },
+          {
+            "active": [
+              2,
+              1,
+              3
+            ],
+            "caption": "Through B, improve A from 4 to 3 and discover T at cost 8.",
+            "state": "dist = [0, 3, 1, 8] · heap includes (3,A),(4,A),(8,T)"
+          },
+          {
+            "active": [
+              1,
+              3
+            ],
+            "caption": "Pop A at cost 3 and improve T to 4. The old (4,A) entry is stale and gets skipped.",
+            "state": "dist = [0, 3, 1, 4]"
+          },
+          {
+            "active": [
+              0,
+              2,
+              1,
+              3
+            ],
+            "caption": "Pop T at its best cost. The route S→B→A→T costs 1+2+1=4.",
+            "state": "answer = 4 · discovery alone did not settle T"
+          }
+        ]
+      },
+      "questions": [
+        {
+          "title": "Network Delay Time",
+          "difficulty": "Medium",
+          "number": 743,
+          "url": "https://leetcode.com/problems/network-delay-time/",
+          "prompt": "Return the earliest time at which every node receives a signal from the starting node, or −1 if any node is unreachable.",
+          "why": "Run Dijkstra on directed nonnegative travel times. The answer is the maximum finite shortest distance; return −1 if any node remains at infinity.",
+          "visual": {
+            "items": [
+              "1",
+              "2",
+              "3",
+              "4"
+            ],
+            "frames": [
+              {
+                "active": [
+                  1
+                ],
+                "caption": "Source 2 sends along edges 2→1:1, 2→3:1, 3→4:1.",
+                "state": "dist = [∞, 0, ∞, ∞]"
+              },
+              {
+                "active": [
+                  0,
+                  1,
+                  2
+                ],
+                "caption": "Relax both outgoing edges of source 2. Nodes 1 and 3 receive the signal at time 1.",
+                "state": "dist = [1, 0, 1, ∞]"
+              },
+              {
+                "active": [
+                  2,
+                  3
+                ],
+                "caption": "Settling node 3 unlocks node 4 at time 2.",
+                "state": "dist = [1, 0, 1, 2]"
+              },
+              {
+                "active": [
+                  0,
+                  1,
+                  2,
+                  3
+                ],
+                "caption": "All nodes are reachable. The slowest shortest arrival determines the answer.",
+                "state": "max distance = 2"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Path With Minimum Effort",
+          "difficulty": "Medium",
+          "number": 1631,
+          "url": "https://leetcode.com/problems/path-with-minimum-effort/",
+          "prompt": "Move through a height grid and minimize the largest absolute height difference along the route.",
+          "why": "Replace additive relaxation with candidate = max(effort_so_far, abs(height[u] − height[v])). Taking another edge cannot lower the current effort, so the minimum-effort heap candidate can be settled safely.",
+          "visual": {
+            "items": [
+              "1",
+              "2",
+              "2",
+              "3",
+              "8",
+              "2",
+              "5",
+              "3",
+              "5"
+            ],
+            "frames": [
+              {
+                "active": [
+                  0,
+                  1,
+                  2,
+                  5,
+                  8
+                ],
+                "caption": "Grid rows are [1,2,2], [3,8,2], [5,3,5]. The top/right route ends with a jump of 3.",
+                "state": "route 1→2→2→2→5 · effort = 3"
+              },
+              {
+                "active": [
+                  0,
+                  3,
+                  6
+                ],
+                "caption": "Explore the left side: jumps 1→3 and 3→5 are both 2.",
+                "state": "candidate effort = max(2,2) = 2"
+              },
+              {
+                "active": [
+                  6,
+                  7,
+                  8
+                ],
+                "caption": "Continue 5→3→5; both jumps are 2, so the route effort stays 2.",
+                "state": "bottom route effort = 2"
+              },
+              {
+                "active": [
+                  0,
+                  3,
+                  6,
+                  7,
+                  8
+                ],
+                "caption": "When the target is popped at effort 2, no smaller-effort route remains pending.",
+                "state": "minimum effort = 2"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Path with Maximum Probability",
+          "difficulty": "Medium",
+          "number": 1514,
+          "url": "https://leetcode.com/problems/path-with-maximum-probability/",
+          "prompt": "Find the path with the largest product of edge success probabilities, returning zero if the destination is unreachable.",
+          "why": "Start the source probability at 1 and use a max-heap (negative probabilities with Python heapq). Relax by multiplication and keep larger values. Since probabilities are in [0,1], extending a path cannot improve its product.",
+          "visual": {
+            "items": [
+              "0",
+              "1",
+              "2"
+            ],
+            "frames": [
+              {
+                "active": [
+                  0
+                ],
+                "caption": "Edges 0↔1:0.5, 1↔2:0.5, 0↔2:0.2; start at node 0.",
+                "state": "best = [1, 0, 0]"
+              },
+              {
+                "active": [
+                  0,
+                  1,
+                  2
+                ],
+                "caption": "Discover node 1 with probability 0.5 and node 2 with probability 0.2.",
+                "state": "max-heap next = (0.5,1)"
+              },
+              {
+                "active": [
+                  1,
+                  2
+                ],
+                "caption": "Through node 1, improve node 2 because 0.5×0.5 exceeds 0.2.",
+                "state": "best[2] = 0.25"
+              },
+              {
+                "active": [
+                  0,
+                  1,
+                  2
+                ],
+                "caption": "Pop node 2 with probability 0.25. Returning when it was first discovered would have been incorrect.",
+                "state": "maximum probability = 0.25"
+              }
+            ]
+          }
+        }
+      ]
     }
   ]
 }

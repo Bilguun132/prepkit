@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-11-16T22:36:00+08:00",
+  "lastUpdated": "2026-11-17T08:05:49+08:00",
   "systemSolutions": {
     "rate-limiter": {
       "intro": "A strong design makes the policy explicit, enforces it near the request path, and chooses a clear consistency tradeoff.",
@@ -399,6 +399,31 @@
           "body": "Keep the last valid snapshot in durable local storage and continue evaluating it during a control-plane outage; apply a configured maximum staleness policy and expose stale state to the host application. If a signature fails or a snapshot is malformed, reject it and retain the prior version. Enforce tenant-scoped authorization on writes, encrypt secrets, and avoid placing sensitive targeting attributes in telemetry. Use idempotent versioned updates, audit all edits, and support rollback by publishing a prior logical configuration as a new version. Local evaluation gives low latency and avoids a central hot path, at the cost of delayed revocation and rules being distributed to clients. Server-side evaluation protects rule confidentiality but adds network latency and service load; support both with an explicit policy."
         }
       ]
+    },
+    "durable-message-broker": {
+      "intro": "Use replicated, append-only partition logs as the durable source of truth. Separate a small strongly consistent metadata plane from the high-throughput broker data plane, and make offsets, acknowledgement rules, and failure recovery explicit.",
+      "sections": [
+        {
+          "title": "Requirements and capacity",
+          "body": "Start with durable append, replay by offset, independent consumer groups, and ordering only within a partition. Exclude global ordering and cross-partition transactions initially. At 200,000 events/s × 1 KB, average raw ingress is about 200 MB/s; seven days retains approximately 121 TB in decimal units. Three replicas require about 363 TB before indexes and overhead, with compression potentially reducing payload bytes. Peak ingress is about 1 GB/s, while replication and multiple consumer groups multiply network traffic. Benchmark sustainable per-partition throughput, then choose enough partitions and brokers to meet both peak throughput and storage requirements with failure and rebalancing headroom."
+        },
+        {
+          "title": "Interfaces, records, and architecture",
+          "body": "Provide CreateTopic(name, partitions, retention), Produce(topic, key, producer_id, sequence, payload), Fetch(topic, partition, offset, max_bytes), and CommitOffset(group, partition, next_offset). A record contains offset, key, timestamp, checksum, producer identity/sequence, and payload. A consensus-backed metadata service stores topic definitions, leader epochs, replica membership, and group assignments. Producers cache metadata and hash keys to partitions; each partition leader appends sequential log segments and replicates them to followers across three failure domains. Consumers fetch batches by offset from partition leaders. A group coordinator leases partitions so one current group member owns each partition, while separate groups maintain independent offsets. Segments and sparse indexes support sequential reads and bounded seeks."
+        },
+        {
+          "title": "Durable writes and leader recovery",
+          "body": "Acknowledge a record only after it is durably persisted to a majority of the three assigned replicas; make disk flush policy explicit and batch flushes to control latency. Use a consensus replication protocol per partition, or equivalent ordered-log rules, to define which prefix is committed and restrict leader election to replicas that preserve that committed prefix. Epochs fence former leaders and stale producers. On failure, elect a valid leader through the metadata/consensus plane, reconcile uncommitted tails, and retry pending writes. A lost acknowledgement creates an ambiguous outcome, so producers retry with the same producer identity and sequence; replicated deduplication state suppresses retries within the supported producer session/window. If a majority is unavailable, reject or pause writes rather than silently weaken the durability contract."
+        },
+        {
+          "title": "Consumer progress, retries, and replay",
+          "body": "A consumer fetches from its committed next offset, processes events, then commits the next offset after successful handling. A crash after a side effect but before offset commit causes redelivery, so consumers deduplicate by stable event ID or store the business update and processed event marker in one database transaction. Offset commits alone do not make an external effect exactly once. Group membership changes create a new assignment generation; fence stale commits and revoke old ownership. New owners resume from the last committed offset. For poison events, use bounded retries and an explicit dead-letter policy; skipping an event relaxes strict processing order and must be a deliberate product choice. Retention is a time/size policy, not an infinite guarantee: alert on lag nearing expiry and return an explicit offset-out-of-range error when replay data has expired."
+        },
+        {
+          "title": "Scaling, isolation, and operational tradeoffs",
+          "body": "Apply tenant byte-rate and storage quotas, bounded producer queues, broker disk watermarks, and retriable overload responses. Batch and compress records to improve throughput at the cost of additional latency. Hot keys still overload a single partition; split the key space only when the application accepts the changed ordering boundary. Increasing partition count can move a key between partitions, so use an explicit migration barrier or stable partition mapping when ordering must survive expansion. Rebalance replicas with bandwidth caps and preserve replication headroom. Authenticate clients, authorize topic/group access, encrypt traffic, and monitor publish latency, quorum health, disk saturation, replication lag, consumer lag, and retention headroom. Per-partition ordering scales well; global ordering collapses writes into a coordination bottleneck. A broker can guarantee durable logs and defined delivery semantics, while application side effects still require their own correctness design."
+        }
+      ]
     }
   },
   "systems": [
@@ -662,6 +687,21 @@
         "Draw the control plane from authenticated admin API to relational metadata store, transactional outbox, validation/compiler, and durable change stream. Draw the data plane from regional distribution endpoints to SDK caches that evaluate locally.",
         "Deep-dive on percentage rollout stability, rule ordering, cache invalidation, mobile clients that sleep, kill-switch propagation, stale config, tenant boundaries, and configuration rollback.",
         "Discuss consistency and resilience tradeoffs: asynchronous fanout gives fast local reads and tolerates network partitions, but propagation is not instantaneous. Versioned snapshots, expiry, acknowledgements, and visible propagation status make that limitation measurable."
+      ]
+    },
+    {
+      "id": "durable-message-broker",
+      "title": "Design a durable message broker",
+      "topic": "Event streaming infrastructure",
+      "tag": "Partitioned logs and consumer recovery",
+      "scenario": "Design a multi-tenant message broker for backend services. Producers append events to named topics; independent consumer groups read and replay events. Support 200,000 events per second on average, 1 million at peak, 1 KB average payload, and seven days of retention. Preserve ordering within a partition, survive one broker failure without losing acknowledged events, and let a slow consumer recover without blocking producers indefinitely. Clarify whether transactions across partitions are required; exclude them in the initial design.",
+      "guide": [
+        "Define publish acknowledgement, replay, retention, group consumption, per-partition ordering, availability and durability targets, and tenant quotas. Distinguish consumer delivery from the business side effects a consumer performs.",
+        "Use capacity math to motivate partitioning: 200K × 1 KB ≈ 200 MB/s and about 121 TB for seven days before replicas, indexes, and compression; three replicas need about 363 TB. Peak raw ingress is about 1 GB/s. Size disk and network capacity from benchmarks, including recovery headroom.",
+        "Specify CreateTopic, Produce(topic, key, producer_id, sequence, payload), Fetch(topic, partition, offset), and CommitOffset(group, partition, next_offset). Identify topic, partition, record, replica assignment, producer sequence, consumer group, and committed offset.",
+        "Trace the write path from metadata lookup to partition leader, local log append, follower replication, and durable acknowledgement. Trace reads from committed log offsets into consumer processing and offset commits.",
+        "Deep-dive on leader failover and fencing, producer retries, consumer rebalancing, poison events, retention versus lag, hot partitions, backpressure, and replay after crashes.",
+        "Compare per-partition ordering with global ordering, quorum durability with write latency, and at-least-once delivery with idempotent side effects. Explain why offset commits alone cannot guarantee exactly-once effects in an external database."
       ]
     }
   ],
