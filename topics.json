@@ -3433,6 +3433,270 @@
           }
         }
       ]
+    },
+    {
+      "id": "binary-search-on-answer",
+      "title": "Binary search on the answer",
+      "subtitle": "Turn an optimization problem into a monotone feasibility check.",
+      "summary": "Instead of looking for an element in a sorted array, search a range of possible answers. Define feasible(x) so it changes from false to true at one boundary. To find the minimum feasible answer, test the midpoint and discard half the candidate range. The main work is proving monotonicity and building a correct feasibility check.",
+      "principles": [
+        "State the decision question first: can this speed, capacity, or day satisfy the constraints?",
+        "Prove that a feasible candidate stays feasible as the candidate increases; otherwise this first-true search does not apply.",
+        "Choose a lower bound and a guaranteed feasible upper bound, handling impossible inputs before searching.",
+        "Use while lo < hi: mid = (lo + hi) // 2; if feasible(mid), set hi = mid; otherwise set lo = mid + 1. Return lo.",
+        "If a feasibility scan costs O(n), searching a candidate range of width R costs O(n log R), usually with O(1) extra scan space."
+      ],
+      "conceptFrames": {
+        "items": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8
+        ],
+        "frames": [
+          {
+            "active": [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7
+            ],
+            "caption": "Suppose candidates 1–4 fail and 5–8 succeed. We seek the first success without scanning them all.",
+            "state": "feasible = F F F F T T T T · lo=1, hi=8"
+          },
+          {
+            "active": [
+              3
+            ],
+            "caption": "Test midpoint 4. Failure proves every candidate at most 4 is too small.",
+            "state": "mid=4 · false → lo=5"
+          },
+          {
+            "active": [
+              5
+            ],
+            "caption": "Test 6. Success keeps 6 as a possible answer but discards larger candidates.",
+            "state": "lo=5, hi=8 · mid=6 · true → hi=6"
+          },
+          {
+            "active": [
+              4
+            ],
+            "caption": "Test 5, which also succeeds; preserve the smallest feasible boundary.",
+            "state": "lo=5, hi=6 · mid=5 · true → hi=5"
+          },
+          {
+            "active": [
+              4
+            ],
+            "caption": "The bounds meet at 5. No lower candidate can be feasible.",
+            "state": "lo=hi=5 · answer=5"
+          }
+        ]
+      },
+      "questions": [
+        {
+          "title": "Koko Eating Bananas",
+          "number": 875,
+          "url": "https://leetcode.com/problems/koko-eating-bananas/",
+          "difficulty": "Medium",
+          "prompt": "Find the smallest integer eating speed that finishes all piles within h hours.",
+          "why": "At speed k, required hours are sum((pile+k−1)//k). More speed cannot increase hours. Search from 1 to max(piles); the upper bound works because the problem guarantees at least one hour per pile.",
+          "visual": {
+            "items": [
+              3,
+              6,
+              7,
+              11
+            ],
+            "frames": [
+              {
+                "active": [
+                  0,
+                  1,
+                  2,
+                  3
+                ],
+                "caption": "For h=8, test speed 6: the four piles require 1,1,2,2 hours.",
+                "state": "hours=6 ≤ 8 · search [1,6]"
+              },
+              {
+                "active": [
+                  0,
+                  1,
+                  2,
+                  3
+                ],
+                "caption": "Test speed 3: the hours are 1,2,3,4, so speed 3 is too slow.",
+                "state": "hours=10 > 8 · search [4,6]"
+              },
+              {
+                "active": [
+                  0,
+                  1,
+                  2,
+                  3
+                ],
+                "caption": "Speed 5 needs 1+2+2+3=8 hours, so keep [4,5].",
+                "state": "feasible(5)=true"
+              },
+              {
+                "active": [
+                  0,
+                  1,
+                  2,
+                  3
+                ],
+                "caption": "Speed 4 also needs 1+2+2+3=8 hours. Bounds meet at 4.",
+                "state": "minimum speed=4"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Capacity To Ship Packages Within D Days",
+          "number": 1011,
+          "url": "https://leetcode.com/problems/capacity-to-ship-packages-within-d-days/",
+          "difficulty": "Medium",
+          "prompt": "Find the minimum ship capacity that sends packages in their given order within the allowed days.",
+          "why": "Greedily pack each day until the next package would exceed capacity, then start a new day. This minimizes days for that capacity. More capacity cannot require more days. Search from max(weights) to sum(weights); never sort the packages.",
+          "visual": {
+            "items": [
+              3,
+              2,
+              2,
+              4,
+              1,
+              4
+            ],
+            "frames": [
+              {
+                "active": [
+                  0,
+                  1,
+                  2,
+                  3,
+                  4,
+                  5
+                ],
+                "caption": "Allow 3 days. Capacity 4 produces loads [3],[2,2],[4],[1],[4].",
+                "state": "5 days → infeasible"
+              },
+              {
+                "active": [
+                  0,
+                  1,
+                  2,
+                  3,
+                  4,
+                  5
+                ],
+                "caption": "Capacity 6 produces loads [3,2],[2,4],[1,4].",
+                "state": "3 days → feasible"
+              },
+              {
+                "active": [
+                  0,
+                  1,
+                  2,
+                  3,
+                  4,
+                  5
+                ],
+                "caption": "Capacity 5 produces loads [3,2],[2],[4,1],[4].",
+                "state": "4 days → infeasible"
+              },
+              {
+                "active": [
+                  0,
+                  1,
+                  2,
+                  3,
+                  4,
+                  5
+                ],
+                "caption": "Feasibility switches between capacities 5 and 6, so 6 is the minimum.",
+                "state": "answer=6 · original order preserved"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Minimum Number of Days to Make m Bouquets",
+          "number": 1482,
+          "url": "https://leetcode.com/problems/minimum-number-of-days-to-make-m-bouquets/",
+          "difficulty": "Medium",
+          "prompt": "Find the earliest day to make m bouquets of k adjacent, non-overlapping bloomed flowers.",
+          "why": "Reject m*k > n. For each candidate day, scan the garden: reset the run on an unbloomed flower, and consume each run of k bloomed flowers as a bouquet. Waiting longer never removes usable flowers. Search between the minimum and maximum bloom days.",
+          "visual": {
+            "items": [
+              7,
+              7,
+              7,
+              7,
+              12,
+              7,
+              7
+            ],
+            "frames": [
+              {
+                "active": [
+                  0,
+                  1,
+                  2,
+                  3,
+                  5,
+                  6
+                ],
+                "caption": "Need m=2 bouquets with k=3. At day 7, the unbloomed center flower splits runs of length 4 and 2.",
+                "state": "bouquets=floor(4/3)+floor(2/3)=1"
+              },
+              {
+                "active": [
+                  0,
+                  1,
+                  2
+                ],
+                "caption": "On day 11 the same gap remains. Six bloomed flowers alone do not prove two adjacent bouquets exist.",
+                "state": "feasible(11)=false"
+              },
+              {
+                "active": [
+                  0,
+                  1,
+                  2,
+                  3,
+                  4,
+                  5,
+                  6
+                ],
+                "caption": "At day 12 all seven flowers bloom. One run can supply two disjoint groups of three.",
+                "state": "bouquets=floor(7/3)=2"
+              },
+              {
+                "active": [
+                  0,
+                  1,
+                  2,
+                  3,
+                  4,
+                  5
+                ],
+                "caption": "Use indices [0,1,2] and [3,4,5]; the earliest feasible day is 12.",
+                "state": "answer=12"
+              }
+            ]
+          }
+        }
+      ]
     }
   ]
 }

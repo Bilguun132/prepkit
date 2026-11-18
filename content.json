@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-11-17T08:05:49+08:00",
+  "lastUpdated": "2026-11-18T08:12:55+08:00",
   "systemSolutions": {
     "rate-limiter": {
       "intro": "A strong design makes the policy explicit, enforces it near the request path, and chooses a clear consistency tradeoff.",
@@ -424,6 +424,31 @@
           "body": "Apply tenant byte-rate and storage quotas, bounded producer queues, broker disk watermarks, and retriable overload responses. Batch and compress records to improve throughput at the cost of additional latency. Hot keys still overload a single partition; split the key space only when the application accepts the changed ordering boundary. Increasing partition count can move a key between partitions, so use an explicit migration barrier or stable partition mapping when ordering must survive expansion. Rebalance replicas with bandwidth caps and preserve replication headroom. Authenticate clients, authorize topic/group access, encrypt traffic, and monitor publish latency, quorum health, disk saturation, replication lag, consumer lag, and retention headroom. Per-partition ordering scales well; global ordering collapses writes into a coordination bottleneck. A broker can guarantee durable logs and defined delivery semantics, while application side effects still require their own correctness design."
         }
       ]
+    },
+    "distributed-tracing": {
+      "intro": "Separate collecting spans from selecting and querying traces. Trace IDs connect causal spans across services, while bounded tail sampling retains useful requests without pretending that every distributed trace will be complete.",
+      "sections": [
+        {
+          "title": "Requirements and capacity",
+          "body": "Support trace-by-ID retrieval and bounded search by service, error status, duration, and time. Target visibility within 30 seconds after collector acceptance, and seven-day retention for sampled traces. Define a maximum assembly window and how late spans are displayed. Peak ingress is 1 GB/s at 2M spans/s and 500 bytes/span. If that peak were sustained, raw storage would be 604.8 TB for seven days. A 5% byte retention assumption gives roughly 30.2 TB of payload before replicas and indexes; actual cost depends on average traffic, compression, and the proportion of errors and slow traces. Measure span size and trace length distributions to size the stream, collector memory, and tail sampling window."
+        },
+        {
+          "title": "APIs and data model",
+          "body": "SDKs export batches with stable (trace_id, span_id), parent_span_id, service, start timestamp, duration, status, and bounded attributes. Derive tenant identity from authenticated credentials. ExportSpans returns an explicit acceptance or retriable overload result. GET /v1/traces/{id} reads a trace manifest and payload chunks; search accepts bounded time ranges, allowlisted service/status filters, minimum duration, and cursor pagination. Partition storage and all lookup keys by tenant. Store a trace summary with root duration when known, participating services, error flags, completeness status, chunk references, and sampling reason. Persist spans independently so a missing parent does not discard useful evidence."
+        },
+        {
+          "title": "High-level ingestion and query design",
+          "body": "SDKs create trace/span IDs and propagate context through outgoing requests. A local collector batches, compresses, and retries with bounded buffers. An authenticated ingest tier validates schema, enforces quotas, and acknowledges only after the batch reaches the chosen durability boundary in a replicated stream. Partition by a hash of tenant and trace ID to place a trace on one assembly owner. Stateful workers collect spans, evaluate tail sampling rules, and write retained chunks plus a versioned manifest to object storage. A separate idempotent indexer reads finalized summaries into a time-partitioned search store. Trace lookup reads the manifest directly; search returns IDs and summaries, followed by payload retrieval on demand. Track stream lag and indexing lag against the visibility target."
+        },
+        {
+          "title": "Tail sampling, lateness, and recovery",
+          "body": "Within a bounded window, retain error traces and slow traces, then deterministically sample ordinary traces by trace ID. Tail sampling must receive spans before deciding, so store assembly state in a bounded keyed store with a checkpoint/changelog that can recover after worker failure. Keep sampling decisions for a defined late-arrival interval. Append late spans to retained traces and update manifests and searchable summaries. If a late error arrives for a previously dropped trace, retain that late evidence as a partial trace; earlier discarded spans cannot be reconstructed without a raw retention buffer. Use a short raw stream retention window for optional reassembly, with explicit storage cost. Deduplicate retries by tenant/trace/span ID and use idempotent chunk/index writes. A finite waiting window bounds latency and memory but cannot guarantee complete traces."
+        },
+        {
+          "title": "Isolation, failure behavior, and tradeoffs",
+          "body": "SDK buffers must have hard byte limits and drop policies, exporting drop counters without blocking application requests. Collectors can spool to disk within quota; once full, reject new batches or shed lower-priority telemetry visibly. Head sampling is cheaper but can discard errors before their outcome is known; tail sampling captures outcomes at higher buffering and routing cost. Never claim all production errors are retained when SDKs can drop spans or a tenant exceeds quota: the target applies to eligible spans received by collectors within the stated policy. Sanitize sensitive attributes, cap attribute sizes, and index only approved fields to prevent cardinality explosions. Use parent IDs for causality and per-span durations for timing; cross-host clock skew makes exact global timestamp order unreliable. Monitor accepted/dropped spans, partial traces, sampling reasons, memory pressure, queue age, query latency, tenant usage, and storage expiry. Keep metrics and logging operationally independent enough to diagnose a tracing outage."
+        }
+      ]
     }
   },
   "systems": [
@@ -702,6 +727,21 @@
         "Trace the write path from metadata lookup to partition leader, local log append, follower replication, and durable acknowledgement. Trace reads from committed log offsets into consumer processing and offset commits.",
         "Deep-dive on leader failover and fencing, producer retries, consumer rebalancing, poison events, retention versus lag, hot partitions, backpressure, and replay after crashes.",
         "Compare per-partition ordering with global ordering, quorum durability with write latency, and at-least-once delivery with idempotent side effects. Explain why offset commits alone cannot guarantee exactly-once effects in an external database."
+      ]
+    },
+    {
+      "id": "distributed-tracing",
+      "title": "Design a distributed tracing platform",
+      "topic": "Observability and request causality",
+      "tag": "Trace assembly and tail sampling",
+      "scenario": "Design a multi-tenant tracing platform for microservices. SDKs emit spans with trace IDs, parent IDs, timings, and attributes. Engineers must retrieve a trace by ID and search recent slow or failed requests by service and time. Ingest 2 million spans per second at peak, averaging 500 bytes per span, and retain selected traces for seven days. Show accepted spans within 30 seconds and aim to retain all error traces that reach the sampling collectors. SDK overhead must stay bounded, and telemetry outages must not stall production requests.",
+      "guide": [
+        "Clarify context propagation, trace lookup, search filters, retention, ingestion durability, tenant isolation, and the difference between spans never emitted and spans dropped after arrival. Define lateness and sampling limits explicitly.",
+        "At peak, 2M × 500 bytes ≈ 1 GB/s. If sustained, that is 86.4 TB/day and 604.8 TB over seven days before replication and indexes. A 5% byte retention rate would reduce payload storage to about 30.2 TB; error-biased sampling can exceed that estimate.",
+        "Define ExportSpans(batch), GET /v1/traces/{id}, and GET /v1/traces?service=&status=&min_duration=&start=&end=. Model tenant, trace ID, span ID, parent span ID, timestamps, attributes, and sampling decision.",
+        "Draw SDK → local collector → authenticated ingest → partitioned durable stream → trace assembler and sampler → object storage plus search index. Route all spans for a tenant/trace to one sampling owner.",
+        "Deep-dive on late spans, incomplete traces, tail-sampling memory, retries and duplicate spans, clock skew, attribute cardinality, and backpressure during outages.",
+        "Compare head versus tail sampling, completeness versus bounded waiting, indexed search versus payload storage cost, and fail-open SDK behavior versus a lossless telemetry promise."
       ]
     }
   ],
