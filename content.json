@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-11-18T08:12:55+08:00",
+  "lastUpdated": "2026-11-19T08:00:33+08:00",
   "systemSolutions": {
     "rate-limiter": {
       "intro": "A strong design makes the policy explicit, enforces it near the request path, and chooses a clear consistency tradeoff.",
@@ -449,6 +449,31 @@
           "body": "SDK buffers must have hard byte limits and drop policies, exporting drop counters without blocking application requests. Collectors can spool to disk within quota; once full, reject new batches or shed lower-priority telemetry visibly. Head sampling is cheaper but can discard errors before their outcome is known; tail sampling captures outcomes at higher buffering and routing cost. Never claim all production errors are retained when SDKs can drop spans or a tenant exceeds quota: the target applies to eligible spans received by collectors within the stated policy. Sanitize sensitive attributes, cap attribute sizes, and index only approved fields to prevent cardinality explosions. Use parent IDs for causality and per-span durations for timing; cross-host clock skew makes exact global timestamp order unreliable. Monitor accepted/dropped spans, partial traces, sampling reasons, memory pressure, queue age, query latency, tenant usage, and storage expiry. Keep metrics and logging operationally independent enough to diagnose a tracing outage."
         }
       ]
+    },
+    "game-leaderboard": {
+      "intro": "Treat accepted score events as durable facts and the ranking index as a recoverable view. Define a total order and snapshot version so that “exact rank” has a precise meaning even while scores are changing.",
+      "sections": [
+        {
+          "title": "Requirements and sizing",
+          "body": "Support trusted score submissions, top 100, exact personal rank, and nearby players, ordered by descending integer score then ascending player ID. Clarify whether score decreases are legal; support them with serialized per-player updates. Normal freshness is at most two seconds after acceptance, while responses expose the applied snapshot version. Fifty million minimal 64-byte records occupy about 3.2 GB raw, but a practical ranked index and replication consume much more. Peak accepted events at 100K/s and 200 bytes/event are roughly 20 MB/s before replication. Benchmark update and rank operations to decide whether a single ordered index meets the target; capacity alone does not establish throughput."
+        },
+        {
+          "title": "Interfaces and durable acceptance",
+          "body": "SubmitScore includes season, player, globally unique event_id and delta; derive server authority from credentials and reject untrusted clients. In a transactional durable store, a unique event_id prevents double application and a per-player version serializes concurrent score changes. Commit the new player score, accepted event, and outbox record atomically, then return an acceptance version. The API offers top, rank, and neighbors queries keyed by season. Store Season(state, cutoff, final_snapshot), PlayerScore(season, player, score, version), AcceptedScoreEvent(event_id, payload_hash, player_version), and ordered ranking entries keyed by (negative_score, player_id). Reusing an event ID with a different payload is rejected."
+        },
+        {
+          "title": "Baseline architecture and recovery",
+          "body": "Authenticated API → durable score database and outbox → ordered event stream → ranked-view worker → replicated ordered index → query API and short-lived top-100 cache. Use an order-statistic tree, or a sorted structure with rank operations, so insert/remove/rank cost O(log N). A single view owner applies a player’s versioned old-to-new score change atomically, ignores already-applied versions, and buffers or repairs version gaps from authoritative state. Snapshot the index with its stream checkpoint and replay after failure. A query reads one committed index version; rank is one plus the number of entries preceding the player. Nearby queries seek around the player’s total-order key. Return both view version and data age, and allow callers to wait for an acceptance version when they require read-after-write behavior."
+        },
+        {
+          "title": "Scaling exact ranks across score ranges",
+          "body": "If the baseline cannot sustain measured load, partition the total order into contiguous score/key ranges with an ordered index and count per range. Exact global rank equals counts of preceding ranges plus local rank, but all terms must come from the same snapshot. Use a transactional, versioned index store: moving a player across ranges removes the old key, adds the new key, and updates range counts in one distributed transaction. MVCC snapshot reads give a consistent player key, preceding counts, and local rank at one timestamp; an independently updated counter cache cannot provide this guarantee. Split hot ranges using the full (score, player_id) key so a popular tied score can span shards. Top K merges the earliest ordered ranges at the same snapshot. Distributed transactions and range-count contention are real costs; benchmark them and offer a bounded-staleness snapshot rather than labeling mixed-time reads exact."
+        },
+        {
+          "title": "Season closure, reliability, and tradeoffs",
+          "body": "Close a season by atomically changing its state to closing and recording an admission cutoff; reject later submissions. Drain every accepted outbox event through that cutoff, wait for the view checkpoints to catch up, and write a versioned immutable final snapshot before marking the season closed. Reconcile index entries and counts against authoritative scores periodically; use rate limits, payload validation, audit trails and anti-cheat checks at trusted ingestion. Monitor acceptance latency, view lag, version gaps, cross-range transaction aborts, count contention and query age. Read replicas and caches can serve a published snapshot but may be stale. A single ordered owner is simpler and gives atomic rank updates; sharding improves capacity while making exact global ranks and score moves more expensive. The durable store and replay log preserve accepted updates even if a ranking cache is lost."
+        }
+      ]
     }
   },
   "systems": [
@@ -742,6 +767,21 @@
         "Draw SDK → local collector → authenticated ingest → partitioned durable stream → trace assembler and sampler → object storage plus search index. Route all spans for a tenant/trace to one sampling owner.",
         "Deep-dive on late spans, incomplete traces, tail-sampling memory, retries and duplicate spans, clock skew, attribute cardinality, and backpressure during outages.",
         "Compare head versus tail sampling, completeness versus bounded waiting, indexed search versus payload storage cost, and fail-open SDK behavior versus a lossless telemetry promise."
+      ]
+    },
+    {
+      "id": "game-leaderboard",
+      "title": "Design a real-time game leaderboard",
+      "topic": "Ranked data and materialized views",
+      "tag": "Exact ranks and season snapshots",
+      "scenario": "Design a global leaderboard for a multiplayer game with 50 million players per season. Trusted game servers submit score changes; players view the top 100, their own exact rank, and nearby competitors. Support 100,000 score updates and 200,000 leaderboard reads per second at peak. Updated scores should normally appear within two seconds. Scores are integers in [0,1000000]; higher scores rank first, ties use ascending player ID. Preserve accepted updates through a node failure and finalize an immutable leaderboard at season close.",
+      "guide": [
+        "Clarify cumulative versus replacement scores, allowed decreases, tie rules, season boundaries, trusted score sources, rank freshness, and whether each page must reflect a single consistent snapshot.",
+        "A 50M-player season with 64 bytes per minimal player record needs about 3.2 GB raw, before indexes, object overhead, replication and history. At 100K updates/s and 200 bytes/event, peak event ingress is about 20 MB/s. Benchmark the ranked structure under contention rather than assuming raw size proves one node is enough.",
+        "Define SubmitScore(season, player, event_id, delta), GET /leaderboards/{season}/top, GET /leaderboards/{season}/players/{id}/rank, and GET /leaderboards/{season}/players/{id}/neighbors. Model accepted event, player score/version, ordered score entry, season state, and snapshot version.",
+        "Trace authenticated submission through deduplication and durable commit into ranked views. Start with one ordered index per leaderboard, then explain score-range partitioning and global rank calculation when throughput exceeds one owner.",
+        "Deep-dive on concurrent updates and score decreases, exact tie ordering, consistent counts, hot score ranges, duplicated events, cross-shard moves, caches, and season-close barriers.",
+        "Compare a simple single-owner sorted index with a coordinated sharded index. Distinguish exact rank at a committed snapshot from approximate counters assembled at different moments."
       ]
     }
   ],

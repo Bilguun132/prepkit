@@ -3697,6 +3697,225 @@
           }
         }
       ]
+    },
+    {
+      "id": "monotonic-deque",
+      "title": "Monotonic deque",
+      "subtitle": "Keep only useful candidates and remove them from either end.",
+      "summary": "A monotonic deque stores candidate indices in an order that makes the best candidate available at the front. Remove expired candidates from the front and dominated candidates from the back. Unlike a monotonic stack, it supports both candidate expiry and dominance removal, making moving-window extrema and certain prefix-sum problems linear.",
+      "principles": [
+        "Store indices so you can test whether a candidate has left the valid range.",
+        "For a window maximum, maintain decreasing values: a later value at least as large dominates an earlier smaller value because it also expires later.",
+        "For a window minimum, reverse the value ordering. Two deques can track a window’s maximum and minimum together.",
+        "Each index is appended once and removed at most once, giving O(n) total deque operations. Python collections.deque supports popleft() without shifting an entire list.",
+        "Choose front-removal rules from the problem: expiry for fixed windows, completed answers for shortest prefix-sum differences. Prove why every removed candidate is no longer needed."
+      ],
+      "conceptFrames": {
+        "items": [
+          4,
+          2,
+          3,
+          1,
+          5
+        ],
+        "frames": [
+          {
+            "active": [
+              0,
+              1
+            ],
+            "caption": "With window size 3, indices 0 and 1 remain candidates in decreasing value order.",
+            "state": "deque indices=[0,1] · values=[4,2]"
+          },
+          {
+            "active": [
+              0,
+              2
+            ],
+            "caption": "Value 3 dominates the older 2: pop index 1 from the back, then append index 2.",
+            "state": "deque=[0,2] · first window maximum=4"
+          },
+          {
+            "active": [
+              2,
+              3
+            ],
+            "caption": "When the window moves to indices 1–3, index 0 expires from the front.",
+            "state": "deque=[2,3] · maximum=3"
+          },
+          {
+            "active": [
+              4
+            ],
+            "caption": "Value 5 dominates both remaining candidates, so remove them from the back.",
+            "state": "deque=[4] · maximum=5"
+          },
+          {
+            "active": [
+              0,
+              2,
+              4
+            ],
+            "caption": "The three windows have maxima 4, 3, and 5; candidates never need to be rescanned.",
+            "state": "result=[4,3,5] · O(n) time, O(k) space"
+          }
+        ]
+      },
+      "questions": [
+        {
+          "title": "Sliding Window Maximum",
+          "number": 239,
+          "url": "https://leetcode.com/problems/sliding-window-maximum/",
+          "difficulty": "Hard",
+          "prompt": "Return the maximum value in every contiguous window of size k.",
+          "why": "Before reading the answer, expire indices smaller than the window start. Pop smaller or equal values from the back, append the new index, and read nums[deque[0]] once the first complete window exists.",
+          "visual": {
+            "items": [
+              1,
+              3,
+              -1,
+              -3,
+              5,
+              3,
+              6,
+              7
+            ],
+            "frames": [
+              {
+                "active": [
+                  1,
+                  2
+                ],
+                "caption": "At right=2, value 3 has already dominated 1. The deque holds indices [1,2].",
+                "state": "window [1,3,-1] → maximum=3"
+              },
+              {
+                "active": [
+                  1,
+                  2,
+                  3
+                ],
+                "caption": "Append −3. The front is still within the window and remains its maximum.",
+                "state": "window [3,-1,-3] → maximum=3"
+              },
+              {
+                "active": [
+                  4
+                ],
+                "caption": "At right=4, index 1 expires. Value 5 removes the remaining smaller candidates.",
+                "state": "window [-1,-3,5] → maximum=5"
+              },
+              {
+                "active": [
+                  4,
+                  6,
+                  7
+                ],
+                "caption": "Continue expiry and dominance removal for each new window.",
+                "state": "output=[3,3,5,5,6,7]"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Longest Continuous Subarray With Absolute Diff Less Than or Equal to Limit",
+          "number": 1438,
+          "url": "https://leetcode.com/problems/longest-continuous-subarray-with-absolute-diff-less-than-or-equal-to-limit/",
+          "difficulty": "Medium",
+          "prompt": "Find the longest contiguous subarray whose largest and smallest values differ by at most limit.",
+          "why": "Use a decreasing deque for maxima and an increasing deque for minima. While max−min exceeds the limit, move the left boundary and expire candidates. Record the largest valid window length; each index enters and leaves each deque at most once.",
+          "visual": {
+            "items": [
+              8,
+              2,
+              4,
+              7
+            ],
+            "frames": [
+              {
+                "active": [
+                  0
+                ],
+                "caption": "With limit=4, begin with a singleton, which always satisfies the difference constraint.",
+                "state": "left=0 · max=min=8 · best=1"
+              },
+              {
+                "active": [
+                  0,
+                  1
+                ],
+                "caption": "Adding 2 makes max−min=6. Move left past 8 and expire index 0.",
+                "state": "valid window=[2]"
+              },
+              {
+                "active": [
+                  1,
+                  2
+                ],
+                "caption": "Add 4: the new window has minimum 2 and maximum 4.",
+                "state": "difference=2 ≤ 4 · best=2"
+              },
+              {
+                "active": [
+                  2,
+                  3
+                ],
+                "caption": "Adding 7 makes [2,4,7] invalid. Remove 2; [4,7] is valid.",
+                "state": "difference=3 · answer=2"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Shortest Subarray with Sum at Least K",
+          "number": 862,
+          "url": "https://leetcode.com/problems/shortest-subarray-with-sum-at-least-k/",
+          "difficulty": "Hard",
+          "prompt": "Find the shortest nonempty subarray with sum at least k, allowing negative values; return −1 if none exists.",
+          "why": "Build prefix sums P and maintain indices with strictly increasing prefix values. For current j, pop front indices while P[j]−P[front]≥k, updating length j−front. Pop back indices while P[j]≤P[back]: the newer prefix is at least as good for every future endpoint and yields a shorter interval.",
+          "visual": {
+            "items": [
+              0,
+              2,
+              1,
+              3
+            ],
+            "frames": [
+              {
+                "active": [
+                  0
+                ],
+                "caption": "For nums=[2,−1,2] and k=3, the displayed values are prefix sums P=[0,2,1,3], not the original array.",
+                "state": "deque=[0] · no answer yet"
+              },
+              {
+                "active": [
+                  0,
+                  1
+                ],
+                "caption": "Prefix index 1 has value 2; retain it after the initial zero.",
+                "state": "deque=[0,1] · values=[0,2]"
+              },
+              {
+                "active": [
+                  0,
+                  2
+                ],
+                "caption": "Prefix value 1 at index 2 dominates value 2 at index 1. It is smaller and later.",
+                "state": "pop back 1 · deque=[0,2]"
+              },
+              {
+                "active": [
+                  0,
+                  3
+                ],
+                "caption": "At prefix index 3, P[3]−P[0]=3. Record length 3 and remove front 0; the next difference is only 2.",
+                "state": "answer=3 · deque after append=[2,3]"
+              }
+            ]
+          }
+        }
+      ]
     }
   ]
 }
