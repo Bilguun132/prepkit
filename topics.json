@@ -3916,6 +3916,265 @@
           }
         }
       ]
+    },
+    {
+      "id": "kmp-prefix-function",
+      "title": "KMP and the prefix function",
+      "subtitle": "Reuse matched prefixes instead of restarting after a mismatch.",
+      "summary": "The prefix table pi[i] records the length of the longest proper prefix of s[:i+1] that is also its suffix. When a new character mismatches, fall back from length j to pi[j−1] until a shorter border can extend. KMP uses this table to search text without moving the text pointer backward, taking O(n+m) time for text length n and pattern length m.",
+      "principles": [
+        "A proper prefix excludes the entire string; prefix and suffix occurrences are allowed to overlap.",
+        "Build pi left to right: start j=pi[i−1]; while j>0 and s[i]!=s[j], set j=pi[j−1]; increment j on a match, then assign pi[i]=j.",
+        "During search, j is the length of the pattern prefix matching the text suffix read so far. On mismatch, follow prefix-table links before comparing the same text character again.",
+        "When j equals the pattern length, the match starts at i−m+1. To find overlapping matches, continue with j=pi[m−1].",
+        "Each successful extension increases j by one and each fallback decreases it, giving linear total work. The pattern table uses O(m) extra space."
+      ],
+      "conceptFrames": {
+        "items": [
+          "a",
+          "b",
+          "a",
+          "b",
+          "a",
+          "c",
+          "a"
+        ],
+        "frames": [
+          {
+            "active": [
+              0,
+              1,
+              2,
+              3,
+              4
+            ],
+            "caption": "Build pi for ababaca. Through index 4, the longest border is aba, length 3.",
+            "state": "pi so far=[0,0,1,2,3]"
+          },
+          {
+            "active": [
+              3,
+              5
+            ],
+            "caption": "At i=5, c does not match s[3]=b. Fall back using pi[2]=1.",
+            "state": "j: 3→1 · text position i stays 5"
+          },
+          {
+            "active": [
+              1,
+              5
+            ],
+            "caption": "c also mismatches s[1]=b, so fall back to pi[0]=0. It mismatches a too.",
+            "state": "j: 1→0 · pi[5]=0"
+          },
+          {
+            "active": [
+              0,
+              6
+            ],
+            "caption": "At i=6, a extends the length-zero border by one.",
+            "state": "pi[6]=1"
+          },
+          {
+            "active": [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "caption": "Every fallback uses a previously proven border; no prefix needs to be rescanned from scratch.",
+            "state": "pi=[0,0,1,2,3,0,1]"
+          }
+        ]
+      },
+      "questions": [
+        {
+          "title": "Find the Index of the First Occurrence in a String",
+          "number": 28,
+          "url": "https://leetcode.com/problems/find-the-index-of-the-first-occurrence-in-a-string/",
+          "difficulty": "Easy",
+          "prompt": "Return the first position of needle inside haystack, or −1 if no occurrence exists.",
+          "why": "Build the prefix table for needle and scan haystack with one matched-length pointer. A mismatch changes only that pointer through failure links; the text position never retreats.",
+          "visual": {
+            "items": [
+              "a",
+              "b",
+              "a",
+              "b",
+              "a",
+              "b",
+              "a",
+              "c"
+            ],
+            "frames": [
+              {
+                "active": [
+                  0,
+                  1,
+                  2,
+                  3,
+                  4
+                ],
+                "caption": "Search needle=ababac in haystack=abababac. After text index 4, five pattern characters match.",
+                "state": "pattern pi=[0,0,1,2,3,0] · j=5"
+              },
+              {
+                "active": [
+                  5
+                ],
+                "caption": "Text index 5 is b but needle[5] is c. Fall back to pi[4]=3, then match that same b against needle[3].",
+                "state": "j: 5→3→4 · i remains 5"
+              },
+              {
+                "active": [
+                  6
+                ],
+                "caption": "The next a matches needle[4].",
+                "state": "j=5"
+              },
+              {
+                "active": [
+                  2,
+                  3,
+                  4,
+                  5,
+                  6,
+                  7
+                ],
+                "caption": "The final c completes all six pattern characters.",
+                "state": "start=7−6+1=2 · return 2"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Repeated Substring Pattern",
+          "number": 459,
+          "url": "https://leetcode.com/problems/repeated-substring-pattern/",
+          "difficulty": "Easy",
+          "prompt": "Decide whether the string consists of two or more copies of a shorter substring.",
+          "why": "Let L=pi[n−1] and candidate period p=n−L. Repetition exists exactly when L>0 and n%p==0. A border alone is insufficient unless the candidate period tiles the full length.",
+          "visual": {
+            "items": [
+              "a",
+              "b",
+              "a",
+              "b",
+              "a",
+              "b"
+            ],
+            "frames": [
+              {
+                "active": [
+                  0,
+                  1,
+                  2,
+                  3,
+                  4,
+                  5
+                ],
+                "caption": "For ababab, build the border lengths for every prefix.",
+                "state": "pi=[0,0,1,2,3,4]"
+              },
+              {
+                "active": [
+                  0,
+                  1,
+                  2,
+                  3
+                ],
+                "caption": "The longest proper border is abab, length L=4.",
+                "state": "n=6 · p=n−L=2"
+              },
+              {
+                "active": [
+                  0,
+                  1,
+                  2,
+                  3,
+                  4,
+                  5
+                ],
+                "caption": "The candidate block ab tiles all six characters exactly three times.",
+                "state": "L>0 and 6%2=0 → true"
+              },
+              {
+                "active": [
+                  0,
+                  1,
+                  2
+                ],
+                "caption": "Contrast aba: its border length is 1, but candidate period 2 does not divide length 3.",
+                "state": "a nonempty border alone does not prove repetition"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Longest Happy Prefix",
+          "number": 1392,
+          "url": "https://leetcode.com/problems/longest-happy-prefix/",
+          "difficulty": "Hard",
+          "prompt": "Return the longest nonempty prefix that is also a proper suffix, or an empty string when none exists.",
+          "why": "Compute the prefix function once and return s[:pi[n−1]]. The table directly answers the longest-border question, including overlapping prefix and suffix occurrences.",
+          "visual": {
+            "items": [
+              "a",
+              "b",
+              "a",
+              "b",
+              "a",
+              "b"
+            ],
+            "frames": [
+              {
+                "active": [
+                  0,
+                  1,
+                  2
+                ],
+                "caption": "At prefix aba, a is both prefix and suffix, giving pi[2]=1.",
+                "state": "pi=[0,0,1]"
+              },
+              {
+                "active": [
+                  0,
+                  1,
+                  2,
+                  3
+                ],
+                "caption": "At prefix abab, ab is a border of length 2.",
+                "state": "pi[3]=2"
+              },
+              {
+                "active": [
+                  0,
+                  1,
+                  2,
+                  3,
+                  4,
+                  5
+                ],
+                "caption": "At the end, prefix abab equals suffix abab beginning at index 2. Overlap is allowed.",
+                "state": "pi[5]=4"
+              },
+              {
+                "active": [
+                  0,
+                  1,
+                  2,
+                  3
+                ],
+                "caption": "Return the first four characters. The full string is excluded by the proper-prefix definition.",
+                "state": "answer=\"abab\" · O(n) time and space"
+              }
+            ]
+          }
+        }
+      ]
     }
   ]
 }

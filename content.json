@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-11-19T08:00:33+08:00",
+  "lastUpdated": "2026-11-20T08:04:17+08:00",
   "systemSolutions": {
     "rate-limiter": {
       "intro": "A strong design makes the policy explicit, enforces it near the request path, and chooses a clear consistency tradeoff.",
@@ -474,6 +474,31 @@
           "body": "Close a season by atomically changing its state to closing and recording an admission cutoff; reject later submissions. Drain every accepted outbox event through that cutoff, wait for the view checkpoints to catch up, and write a versioned immutable final snapshot before marking the season closed. Reconcile index entries and counts against authoritative scores periodically; use rate limits, payload validation, audit trails and anti-cheat checks at trusted ingestion. Monitor acceptance latency, view lag, version gaps, cross-range transaction aborts, count contention and query age. Read replicas and caches can serve a published snapshot but may be stale. A single ordered owner is simpler and gives atomic rank updates; sharding improves capacity while making exact global ranks and score moves more expensive. The durable store and replay log preserve accepted updates even if a ranking cache is lost."
         }
       ]
+    },
+    "distributed-lock-service": {
+      "intro": "Use consensus to serialize lease grants and monotonically increasing fencing tokens to reject obsolete owners at the protected resource. Lease expiry enables progress, while downstream validation provides the safety that a paused client cannot provide for itself.",
+      "sections": [
+        {
+          "title": "Requirements and capacity",
+          "body": "Agree on resource-level exclusive grants, bounded lease TTLs, owner identity, waiting policy, retry semantics, and the downstream fencing contract. One million 200-byte active records require roughly 200 MB raw before replicas, history and deduplication. With 30-second TTLs and renewal every 10 seconds, a million continuously held leases generate about 100K renewals/s before acquisition and release traffic. The initial 100K/s total budget therefore has no spare capacity: choose a smaller simultaneously renewing population, longer TTLs, or a higher measured capacity. Size shard count from consensus-write benchmarks and hot-resource contention, not memory size alone."
+        },
+        {
+          "title": "API, data model, and routing",
+          "body": "Acquire(resource, owner, request_id, ttl) returns a unique lease_id, per-resource generation and TTL after durable commit, or a busy response. Renew requires lease_id and generation and must fail for obsolete or already expired ownership. Release conditionally removes only that exact active lease; a delayed release cannot delete a successor. Persist request_id with a request hash and original outcome for bounded retry deduplication. Retrying an old acquire must never create a second lease silently; expose whether the original grant is still active. Each record includes resource, lease identity, owner, generation, TTL/expiry state and revision. Hash resource names to consensus groups; a resource has exactly one authoritative group during routing changes."
+        },
+        {
+          "title": "Consensus, expiration, and failover",
+          "body": "Route mutations to a shard leader replicated across three failure domains. Acquire is a committed conditional transition from free to held that increments the durable per-resource generation; retain generation metadata after release so tokens never reset for a reused resource name. Renew and release are also ordered consensus commands. Expiration is a committed transition conditional on the current lease identity and renewal revision, so a queued expiration cannot cancel a renewal already ordered before it. Use monotonic local timers rather than trusting client clocks. On leader change, recover committed state and conservatively wait at least the maximum supported lease TTL before expiring recovered leases if remaining time cannot be established safely; this delays availability but avoids premature regranting under ambiguous elapsed time. Clients treat renewal timeout as loss of authority and stop protected work. A majority is required for grants; a minority partition cannot issue new ownership."
+        },
+        {
+          "title": "Fencing paused clients at the resource",
+          "body": "A client may pause past expiry and later resume while a new owner is working. Include the monotonically increasing generation on every protected write. The downstream store atomically compares the token against its per-resource highest accepted token in the same transaction as the mutation, rejecting smaller tokens. A successor must install its token through a fencing barrier before treating itself as admitted to the protected resource; after that barrier all older writes are rejected. Writes by an old client before that barrier may still have committed, so describe this guarantee precisely. Multiple writes from the same generation are allowed only under the application’s owner and sequencing policy; use idempotency keys for retried side effects. For an external API that cannot enforce fencing or equivalent conditional updates, this service can provide advisory coordination but cannot promise exclusion of stale effects."
+        },
+        {
+          "title": "Waiting, recovery, and tradeoffs",
+          "body": "Use revision-based watches: first read the busy lease with a revision, then watch from that revision so a release between read and subscription is not lost. If history is compacted, reread and restart. Add bounded wait queues, jittered retry, tenant quotas and cancellation so one hot lock does not exhaust a shard. Fairness requires a durable ordered waiter policy and comes with extra state; a simple retry API is not strictly FIFO. Shard migration needs a fenced routing epoch and one authoritative grant path so old and new groups cannot both grant. Monitor grant latency, renewal failures, expired leases, consensus quorum health, hot keys, watch fanout, fencing rejections and deduplication retention. Short TTLs recover abandoned work sooner but increase renewal load and sensitivity to pauses; longer TTLs reduce traffic but delay takeover. Multi-resource atomic locking and cross-region synchronous availability require additional coordination beyond the initial scope."
+        }
+      ]
     }
   },
   "systems": [
@@ -782,6 +807,21 @@
         "Trace authenticated submission through deduplication and durable commit into ranked views. Start with one ordered index per leaderboard, then explain score-range partitioning and global rank calculation when throughput exceeds one owner.",
         "Deep-dive on concurrent updates and score decreases, exact tie ordering, consistent counts, hot score ranges, duplicated events, cross-shard moves, caches, and season-close barriers.",
         "Compare a simple single-owner sorted index with a coordinated sharded index. Distinguish exact rank at a committed snapshot from approximate counters assembled at different moments."
+      ]
+    },
+    {
+      "id": "distributed-lock-service",
+      "title": "Design a distributed lock and lease service",
+      "topic": "Coordination and fault tolerance",
+      "tag": "Leases, fencing tokens, and stale clients",
+      "scenario": "Design a coordination service that grants exclusive leases for named resources to backend workers. Support acquire, renew, release, and bounded waiting for a lease. Expect one million active resource names and 100,000 total coordination operations per second at peak. Workers can pause or lose connectivity at any time; the service must recover from one node failure without issuing conflicting committed ownership grants. Protected storage must reject stale owners after a newer owner is admitted. Start with independent resource locks and exclude atomic acquisition of multiple resources.",
+      "guide": [
+        "Define ownership versus permission to mutate the downstream resource, lease duration, fairness, retry semantics, renewal deadlines, latency targets, and which external systems can enforce fencing tokens.",
+        "One million active leases at 200 bytes each is roughly 200 MB raw before indexes, log history, replicas, and deduplication. With 30-second leases renewed every 10 seconds, renewals alone can consume 100K operations/s; negotiate a higher budget, fewer renewable leases, or longer leases before claiming the stated throughput suffices.",
+        "Specify Acquire(resource, owner, request_id, ttl), Renew(lease_id, generation, request_id), Release(lease_id, generation), and Watch(resource, revision). Model current grant, immutable lease identity, expiry state, per-resource generation, and deduplicated request outcome.",
+        "Draw clients → shard router → consensus-backed resource shard → replicated lease state and expiration scheduler. Protected writes carry fencing tokens to a downstream store that atomically checks them.",
+        "Deep-dive on lost acknowledgements, delayed renewals, paused owners, leader failover, clock assumptions, watch races, retry storms, and compare-and-delete release.",
+        "Compare availability with exclusive grants during partitions, short leases with renewal cost, and advisory locks with enforceable fencing. Explain why an expired lease cannot physically stop a paused worker from resuming."
       ]
     }
   ],
