@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-11-20T08:04:17+08:00",
+  "lastUpdated": "2026-11-21T07:59:14+08:00",
   "systemSolutions": {
     "rate-limiter": {
       "intro": "A strong design makes the policy explicit, enforces it near the request path, and chooses a clear consistency tradeoff.",
@@ -499,6 +499,31 @@
           "body": "Use revision-based watches: first read the busy lease with a revision, then watch from that revision so a release between read and subscription is not lost. If history is compacted, reread and restart. Add bounded wait queues, jittered retry, tenant quotas and cancellation so one hot lock does not exhaust a shard. Fairness requires a durable ordered waiter policy and comes with extra state; a simple retry API is not strictly FIFO. Shard migration needs a fenced routing epoch and one authoritative grant path so old and new groups cannot both grant. Monitor grant latency, renewal failures, expired leases, consensus quorum health, hot keys, watch fanout, fencing rejections and deduplication retention. Short TTLs recover abandoned work sooner but increase renewal load and sensitivity to pauses; longer TTLs reduce traffic but delay takeover. Multi-resource atomic locking and cross-region synchronous availability require additional coordination beyond the initial scope."
         }
       ]
+    },
+    "package-registry": {
+      "intro": "Keep immutable, digest-addressed artifact bytes separate from transactional package metadata. Publish a version only after its artifact is verified and durable, and make provenance, namespace ownership, and revocation semantics explicit.",
+      "sections": [
+        {
+          "title": "Requirements and capacity",
+          "body": "Support scoped public/private namespaces, immutable package versions, dependency manifests, mutable distribution tags, authenticated publication and quarantine. A version tuple cannot be overwritten even after quarantine; retain a tombstone if bytes are later deleted. Ten million versions at 5 MB average require about 50 TB raw storage, with another 5 TB/day at one million publishes/day before replication. Peak downloads need roughly 100 GB/s of artifact egress, so cache immutable bytes at a CDN and serve small metadata separately. Estimate metadata object sizes, cache hit rate, scanning throughput and retention to size databases and workers. State a 30-second normal propagation target and define stronger publish confirmation separately."
+        },
+        {
+          "title": "APIs and data model",
+          "body": "POST /upload-sessions creates a scoped staging upload; POST /packages/{name}/versions finalizes an artifact using an idempotency key, version, manifest and expected digest. GET package metadata returns available versions, manifests and tag revision with an ETag; GET a version returns its immutable digest and provenance. Conditional tag updates require a matching prior revision. Download authorization resolves a package/version to the verified blob rather than granting arbitrary digest access. Store Namespace and membership, Package, Version(namespace,name,version,digest,manifest,state), Blob(digest,size,storage_state), Tag(package,name,target,revision), PublishRequest and append-only AuditEvent. Enforce a unique constraint on namespace/name/version and compare payload hashes when idempotency keys repeat."
+        },
+        {
+          "title": "Publication and installation architecture",
+          "body": "Maintainer → authenticated API → upload session → staging object store → validation/scanning workers → immutable artifact store → transactional metadata service and outbox → cache invalidation/index workers. Verify the uploaded digest and archive size, validate the manifest, and complete the required durable object replication before marking the blob ready. A metadata transaction can then publish the version and its outbox event; metadata must never reference an unfinished staging upload. If the transaction fails, retain the orphan for delayed cleanup. Clients fetch metadata with conditional requests, resolve dependencies according to one supported versioning scheme, and write exact versions plus integrity digests into lockfiles. Installs using lockfiles fetch immutable artifacts via CDN and verify downloaded bytes against the recorded digest. The initial design keeps dependency solving on clients; a server resolver would additionally need explicit snapshot/version semantics."
+        },
+        {
+          "title": "Integrity, tenancy, and compromised releases",
+          "body": "Use scoped publisher credentials, namespace ownership checks, short-lived upload tokens, audit logs and optional signed provenance tied to a build identity. Keep private package metadata out of shared public caches. For private downloads, authorize before serving cached bytes, include access scope in the cache policy, and bound token lifetime; digest equality is not authorization. Enforce explicit registry/namespace mappings to reduce dependency confusion rather than automatically preferring a public package with the same name. Quarantine changes mutable metadata, invalidates caches, blocks new authorized downloads and records a durable tombstone. Short-lived download tokens and edge revocation checks bound propagation, but bytes already downloaded or installed cannot be recalled. A CDN purge alone is not a universal immediate-revocation guarantee; publish a maximum revocation window and require online policy checks where stricter behavior is needed."
+        },
+        {
+          "title": "Failure recovery and tradeoffs",
+          "body": "Concurrent publishes serialize on the immutable version key. Retried finalize calls return the original result; an object-store success followed by a database failure is repaired through idempotent retry or delayed orphan collection. Store tag updates with compare-and-set revision checks so competing releases cannot silently overwrite each other. Outbox consumers are idempotent and can replay invalidations and search indexing. Give immutable blobs long cache lifetimes; mutable metadata uses short TTLs and validators, with quarantine checks outside an indefinitely cached artifact URL. Garbage collection must prove no published references exist and use a grace period longer than upload/retry windows, protected by a reference/GC state protocol against concurrent publication. Monitor missing-blob errors, publish lag, scan backlog, origin bandwidth, metadata cache age, authorization failures and quarantine propagation. Replicated read metadata improves availability but can be briefly stale; the authoritative publish endpoint returns the committed version while global caches converge."
+        }
+      ]
     }
   },
   "systems": [
@@ -822,6 +847,21 @@
         "Draw clients → shard router → consensus-backed resource shard → replicated lease state and expiration scheduler. Protected writes carry fencing tokens to a downstream store that atomically checks them.",
         "Deep-dive on lost acknowledgements, delayed renewals, paused owners, leader failover, clock assumptions, watch races, retry storms, and compare-and-delete release.",
         "Compare availability with exclusive grants during partitions, short leases with renewal cost, and advisory locks with enforceable fencing. Explain why an expired lease cannot physically stop a paused worker from resuming."
+      ]
+    },
+    {
+      "id": "package-registry",
+      "title": "Design a software package registry",
+      "topic": "Artifact distribution and release integrity",
+      "tag": "Immutable versions and secure publishing",
+      "scenario": "Design a registry for public and private software packages. Maintainers publish immutable package versions with dependency manifests, clients resolve version metadata and download artifacts, and administrators can quarantine compromised releases. Support 10 million stored versions, 1 million new versions per day, 5 MB average compressed artifact size, and peak 100,000 metadata reads plus 20,000 artifact downloads per second globally. Make acknowledged published versions durable and normally visible within 30 seconds. Specify what clients can expect when a cached or already downloaded release is revoked.",
+      "guide": [
+        "Clarify namespace ownership, immutable version rules, mutable tags such as latest, supported version-range semantics, lockfiles, private access, provenance, quarantine and deletion policies.",
+        "Ten million versions at 5 MB need about 50 TB raw; 1M new versions/day adds about 5 TB/day before replicas. Peak artifact egress at 20K/s is about 100 GB/s, motivating a CDN. Treat metadata QPS and artifact bandwidth as separate scaling problems.",
+        "Define upload sessions, finalize-publish, package/version metadata lookup, conditional tag updates, artifact download, and quarantine APIs. Model namespace, package, version, digest-addressed blob, dependency manifest, tag revision, and audit record.",
+        "Trace authenticated publication through staging upload, checksum verification, validation/scanning, immutable blob storage and an atomic metadata commit. Trace installation through cached metadata, lockfile resolution, authorization, and CDN or object storage download.",
+        "Deep-dive on simultaneous publication, retry idempotency, metadata/blob consistency, dependency confusion, digest checks, private-cache isolation, compromised maintainers, quarantine propagation and orphan cleanup.",
+        "Compare immutable cacheable artifacts with mutable metadata, availability with immediate revocation, and client-side dependency resolution with a server resolver that must reproduce a particular metadata snapshot."
       ]
     }
   ],

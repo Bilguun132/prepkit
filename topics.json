@@ -4175,6 +4175,240 @@
           }
         }
       ]
+    },
+    {
+      "id": "merge-sort-counting",
+      "title": "Merge sort and cross-half counting",
+      "subtitle": "Sort smaller ranges, then count relationships while merging.",
+      "summary": "Merge sort divides a contiguous range in two, recursively sorts each half, and merges them with two pointers. Sorted halves also let you count relationships between their elements in linear time. Each index pair belongs to one recursive split, so internal-half counts plus cross-half counts cover all pairs without duplication.",
+      "principles": [
+        "Use half-open ranges [lo,hi); a range of length zero or one is already sorted.",
+        "Merge sorted halves by taking the smaller front value, then append either remaining tail. A reusable buffer avoids repeated allocation.",
+        "Preserve original indices when answers belong to original positions; sorting only the values loses that association.",
+        "For strict smaller-than counts, merge equal left values first so equal right values do not contribute.",
+        "Prove the pair-count condition separately from the merge comparison. Each level does O(n) work, giving O(n log n) time and O(n) auxiliary buffer space plus O(log n) recursion depth."
+      ],
+      "conceptFrames": {
+        "items": [
+          5,
+          2,
+          6,
+          1
+        ],
+        "frames": [
+          {
+            "active": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "caption": "Split the contiguous input into [5,2] and [6,1]. Every original left index precedes every original right index.",
+            "state": "left indices=[0,1] · right indices=[2,3]"
+          },
+          {
+            "active": [
+              0,
+              1
+            ],
+            "caption": "Recursively sort the left half and count its single ordinary inversion: 5>2.",
+            "state": "left sorted=[2,5] · internal inversions=1"
+          },
+          {
+            "active": [
+              2,
+              3
+            ],
+            "caption": "Sort the right half and count 6>1.",
+            "state": "right sorted=[1,6] · internal inversions=1"
+          },
+          {
+            "active": [
+              0,
+              1,
+              3
+            ],
+            "caption": "During merge, right value 1 precedes both remaining left values 2 and 5: two cross-half inversions.",
+            "state": "cross count += 2 · merged prefix=[1]"
+          },
+          {
+            "active": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "caption": "Finish the merge as [1,2,5,6]. The original array has four ordinary inversions.",
+            "state": "total=1+1+2=4 · no pair counted twice"
+          }
+        ]
+      },
+      "questions": [
+        {
+          "title": "Sort an Array",
+          "number": 912,
+          "url": "https://leetcode.com/problems/sort-an-array/",
+          "difficulty": "Medium",
+          "prompt": "Sort the integer array in ascending order without using a built-in sort, meeting O(n log n) time.",
+          "why": "Recursively sort each contiguous half, merge through a shared buffer, then copy the merged range back. Merge sort gives a predictable O(n log n) bound with O(n) auxiliary space; discuss heapsort if the interviewer requires constant auxiliary space.",
+          "visual": {
+            "items": [
+              5,
+              2,
+              3,
+              1
+            ],
+            "frames": [
+              {
+                "active": [
+                  0,
+                  1,
+                  2,
+                  3
+                ],
+                "caption": "Split into [5,2] and [3,1], then recurse down to single elements.",
+                "state": "base case: range length ≤ 1"
+              },
+              {
+                "active": [
+                  0,
+                  1
+                ],
+                "caption": "Merge the left singleton ranges by selecting 2 before 5.",
+                "state": "left sorted=[2,5]"
+              },
+              {
+                "active": [
+                  2,
+                  3
+                ],
+                "caption": "Merge the right singleton ranges by selecting 1 before 3.",
+                "state": "right sorted=[1,3]"
+              },
+              {
+                "active": [
+                  0,
+                  1,
+                  2,
+                  3
+                ],
+                "caption": "Merge [2,5] with [1,3]: take 1,2,3, then the remaining 5.",
+                "state": "answer=[1,2,3,5]"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Count of Smaller Numbers After Self",
+          "number": 315,
+          "url": "https://leetcode.com/problems/count-of-smaller-numbers-after-self/",
+          "difficulty": "Hard",
+          "prompt": "For each original position, count values strictly smaller than it to its right.",
+          "why": "Merge (value, original_index) pairs. Whenever a right value is emitted before a left value, increment a moved-right counter. Add that counter when emitting each left value. Equal values take from the left first. Recursive internal counts and cross-half counts accumulate at original indices.",
+          "visual": {
+            "items": [
+              5,
+              2,
+              6,
+              1
+            ],
+            "frames": [
+              {
+                "active": [
+                  0,
+                  1
+                ],
+                "caption": "Sorting [5,2] adds one to the answer for original index 0.",
+                "state": "counts=[1,0,0,0]"
+              },
+              {
+                "active": [
+                  2,
+                  3
+                ],
+                "caption": "Sorting [6,1] adds one to the answer for original index 2.",
+                "state": "counts=[1,0,1,0]"
+              },
+              {
+                "active": [
+                  3,
+                  1
+                ],
+                "caption": "Merge sorted halves [2,5] and [1,6]. Emit 1, then 2; one right-side value is smaller than 2.",
+                "state": "counts=[1,1,1,0]"
+              },
+              {
+                "active": [
+                  0,
+                  3
+                ],
+                "caption": "Emit 5 with moved-right count 1, adding its cross-half smaller value.",
+                "state": "answer=[2,1,1,0] · original positions preserved"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Reverse Pairs",
+          "number": 493,
+          "url": "https://leetcode.com/problems/reverse-pairs/",
+          "difficulty": "Hard",
+          "prompt": "Count original index pairs i<j for which nums[i] is greater than twice nums[j].",
+          "why": "After sorting both halves, scan left values in ascending order and advance a right pointer while left>2*right. Add how many right values qualify for each left value, then perform a normal merge. The counting pointer never retreats. Python integers avoid overflow; fixed-width languages need a wider type for doubling.",
+          "visual": {
+            "items": [
+              2,
+              4,
+              3,
+              5,
+              1
+            ],
+            "frames": [
+              {
+                "active": [
+                  0,
+                  1,
+                  2,
+                  3,
+                  4
+                ],
+                "caption": "Split at index 2: left [2,4] and right [3,5,1]. Count internal pairs recursively.",
+                "state": "right internal pairs=(3,1),(5,1) · count=2"
+              },
+              {
+                "active": [
+                  0,
+                  1,
+                  2,
+                  3,
+                  4
+                ],
+                "caption": "The sorted halves are [2,4] and [1,3,5]. Count cross pairs before the final normal merge.",
+                "state": "left=2: 2>2×1 is false · cross += 0"
+              },
+              {
+                "active": [
+                  1,
+                  4
+                ],
+                "caption": "For left value 4, only right value 1 qualifies. The next value 3 fails because 4≤6.",
+                "state": "left=4: cross += 1"
+              },
+              {
+                "active": [
+                  0,
+                  1,
+                  2,
+                  3,
+                  4
+                ],
+                "caption": "Add internal and cross counts, then merge the sorted ranges.",
+                "state": "answer=2+1=3 · strict inequality matters"
+              }
+            ]
+          }
+        }
+      ]
     }
   ]
 }
