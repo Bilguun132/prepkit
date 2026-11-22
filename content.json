@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-11-21T07:59:14+08:00",
+  "lastUpdated": "2026-11-22T08:00:31+08:00",
   "systemSolutions": {
     "rate-limiter": {
       "intro": "A strong design makes the policy explicit, enforces it near the request path, and chooses a clear consistency tradeoff.",
@@ -524,6 +524,31 @@
           "body": "Concurrent publishes serialize on the immutable version key. Retried finalize calls return the original result; an object-store success followed by a database failure is repaired through idempotent retry or delayed orphan collection. Store tag updates with compare-and-set revision checks so competing releases cannot silently overwrite each other. Outbox consumers are idempotent and can replay invalidations and search indexing. Give immutable blobs long cache lifetimes; mutable metadata uses short TTLs and validators, with quarantine checks outside an indefinitely cached artifact URL. Garbage collection must prove no published references exist and use a grace period longer than upload/retry windows, protected by a reference/GC state protocol against concurrent publication. Monitor missing-blob errors, publish lag, scan backlog, origin bandwidth, metadata cache age, authorization failures and quarantine propagation. Replicated read metadata improves availability but can be briefly stale; the authoritative publish endpoint returns the committed version while global caches converge."
         }
       ]
+    },
+    "secrets-manager": {
+      "intro": "Separate authorization, encrypted version storage, and rotation orchestration. Use short-lived workload identity, envelope encryption, and explicit policy freshness so the service’s access guarantees remain clear during caching and regional failures.",
+      "sections": [
+        {
+          "title": "Requirements and capacity",
+          "body": "Support immutable versions, controlled current-version aliases, tenant-scoped access, rotation, audit and recoverable deletion. Clarify whether dynamic credentials are required in addition to stored static secrets. Ten million 2 KB versions are about 20 GB of plaintext-equivalent payload; metadata, wrapped keys, replicas and audit history may dominate storage. Peak read payload is about 200 MB/s before protocol overhead. At 500 bytes/event and 100K reads/s sustained, audit ingress is 50 MB/s or 4.32 TB/day. Benchmark identity verification, policy evaluation, key-service calls and network latency against the 100 ms regional target. Promise the 60-second revocation bound for online authorization checks, while separately describing existing client copies and downstream credential validity."
+        },
+        {
+          "title": "API and data model",
+          "body": "Expose CreateVersion with a request ID, ReadSecret with an explicit version or alias, conditional alias updates, Rotate and policy administration. Derive tenant and workload identity from verified short-lived credentials, never a caller-supplied tenant header alone. Store Secret(tenant,id,state), Version(secret,version,ciphertext,wrapped_data_key,key_id,encryption_context), Alias(secret,name,target,revision), Policy(scope,rules,revision), RotationJob(id,state,external_reference) and append-only AuditEvent(request,principal,secret,version,decision,policy_revision). A unique request ID with payload comparison makes version creation idempotent. Secret bodies are omitted from application logs, traces and audit events."
+        },
+        {
+          "title": "Read/write architecture and encryption",
+          "body": "For each new version, generate a fresh data encryption key through a managed key service, encrypt with an authenticated cipher using tenant/secret/version as associated context, and persist the ciphertext plus wrapped key after a durable transaction. The key service retains the wrapping key under its access controls. Regional read services authenticate workload identity, evaluate the current permitted policy, select a version and fetch its ciphertext. Only an authorized service path unwraps the data key and decrypts; TLS protects the response. Cache ciphertext freely within tenant boundaries, while any plaintext/data-key cache is bounded, isolated and reauthorized on every read. Commit write metadata and an outbox event atomically for replication and invalidation. Authoritative write confirmation is distinct from asynchronous cross-region visibility."
+        },
+        {
+          "title": "Policy freshness, audits, and outages",
+          "body": "Publish policy changes with monotonically increasing revisions and push invalidations to regions. A region may authorize from a cached policy only while its last successful authoritative refresh is younger than the 60-second revocation limit, with a conservative allowance for processing delay; once stale, fail closed until refreshed. This trades availability for the stated online-read bound during partitions. Do not permit a long-lived bearer token to bypass the policy check. Record an access-decision event durably before returning secret bytes when audit durability is mandatory; if the audit pipeline cannot accept it, reject the read rather than silently lose the audit. The event proves an authorized disclosure attempt, not that a remote client received the response. A key-service outage can use only explicitly approved short-lived key caches; otherwise decryption fails closed. Monitor authorization age, denied reads, decrypt errors, audit lag and cross-tenant access anomalies."
+        },
+        {
+          "title": "Rotation, revocation, and tradeoffs",
+          "body": "Run rotation as a durable state machine: generate a new external credential, store a pending encrypted version, verify it against the target system, conditionally switch the current alias, wait a defined client migration interval, and revoke the old external credential. Serialize rotations per secret and use idempotent external operation IDs or reconciliation queries so retries do not create uncontrolled credentials. Recover by observing which steps succeeded; no atomic transaction spans an external database and the secrets metadata store. When the target supports two active credentials, overlap enables safe rollout; otherwise rotation may require a coordinated maintenance window. Revoking registry read permission cannot remove cached client bytes or disable a static password at its target. Revoke the external credential or use short-lived dynamic credentials to bound that exposure, accounting for target-side revocation semantics. Encrypt backups, restrict and audit break-glass access, test restore procedures and retain deletion tombstones. Faster policy revocation and less plaintext caching increase dependence on online services; document that tradeoff rather than promising both indefinite offline access and immediate revocation."
+        }
+      ]
     }
   },
   "systems": [
@@ -862,6 +887,21 @@
         "Trace authenticated publication through staging upload, checksum verification, validation/scanning, immutable blob storage and an atomic metadata commit. Trace installation through cached metadata, lockfile resolution, authorization, and CDN or object storage download.",
         "Deep-dive on simultaneous publication, retry idempotency, metadata/blob consistency, dependency confusion, digest checks, private-cache isolation, compromised maintainers, quarantine propagation and orphan cleanup.",
         "Compare immutable cacheable artifacts with mutable metadata, availability with immediate revocation, and client-side dependency resolution with a server resolver that must reproduce a particular metadata snapshot."
+      ]
+    },
+    {
+      "id": "secrets-manager",
+      "title": "Design a secrets management service",
+      "topic": "Identity and secure configuration",
+      "tag": "Envelope encryption and credential rotation",
+      "scenario": "Design a multi-tenant secrets service for production applications. Authorized workloads read versioned credentials, operators create and rotate secrets, and administrators revoke access with an audit trail. Support 10 million secret versions averaging 2 KB and 100,000 reads per second at peak across regions. Target under 100 ms regional read latency and durable acknowledged writes. Define a maximum 60-second policy revocation window for online reads, and explain what happens to credentials or secret bytes already delivered to a workload.",
+      "guide": [
+        "Clarify static secret versions versus dynamically issued credentials, workload authentication, access policies, rotation schedules, version aliases, deletion recovery, audit requirements, and revocation scope.",
+        "Ten million versions at 2 KB require about 20 GB of plaintext-equivalent payload before encryption metadata, replicas and history. Peak read payload is about 200 MB/s. At 500 bytes per read audit event, 100K reads/s sustained produces about 4.32 TB/day of raw audit data.",
+        "Define CreateVersion(secret, value, request_id), ReadSecret(secret, version_or_alias), Rotate(secret), UpdatePolicy and Revoke. Model secret metadata, encrypted version, wrapped data key, policy revision, alias revision, workload identity and audit event.",
+        "Draw workload identity exchange → authenticated gateway → policy evaluation → ciphertext store/cache → key-management decrypt → authorized response. Separate administrative mutations, audit storage and rotation workers.",
+        "Deep-dive on envelope encryption, tenant isolation, authorization caching, rotation across external systems, concurrent rotations, key-service outages, audit durability and credentials retained by clients.",
+        "Compare plaintext caching with decryption cost, strict online revocation with outage availability, and static secrets with short-lived dynamic credentials. Make clear that revoking read permission does not erase an already disclosed password."
       ]
     }
   ],
