@@ -4642,6 +4642,219 @@
           }
         }
       ]
+    },
+    {
+      "id": "sweep-line-events",
+      "title": "Sweep line and boundary events",
+      "subtitle": "Process changes at boundaries instead of revisiting every interval.",
+      "summary": "A sweep line turns intervals into start and end events, sorts the event coordinates, and maintains the state between consecutive boundaries. Additive state needs only net deltas; an active maximum needs a heap or ordered multiset. Group events at the same coordinate before reporting the new state so touching intervals are handled consistently.",
+      "principles": [
+        "Choose interval semantics first: [l,r) stops at r, while an inclusive integer range [l,r] can be represented by removal at r+1.",
+        "For sums or occupancy, add weight at the start and subtract it at the end; a running total reconstructs the active load.",
+        "Group all events at a coordinate before evaluating the state immediately to its right; avoid spurious intermediate changes.",
+        "For a skyline, track active heights with multiplicities or a heap with expiry. Removing one building must not remove another building of the same height.",
+        "With sparse coordinates, sort O(n) boundaries for O(n log n) processing. A dense bounded coordinate range may use a difference array and a linear scan."
+      ],
+      "conceptFrames": {
+        "items": [
+          1,
+          3,
+          5,
+          7
+        ],
+        "frames": [
+          {
+            "active": [
+              0
+            ],
+            "caption": "Two half-open weighted intervals are [1,5) with weight 2 and [3,7) with weight 3. Only the four boundaries change the load.",
+            "state": "events: (1,+2),(3,+3),(5,−2),(7,−3)"
+          },
+          {
+            "active": [
+              0,
+              1
+            ],
+            "caption": "At coordinate 1 the load becomes 2 and remains 2 until coordinate 3.",
+            "state": "load on [1,3)=2"
+          },
+          {
+            "active": [
+              1,
+              2
+            ],
+            "caption": "At coordinate 3 add 3; the intervals now overlap.",
+            "state": "load on [3,5)=5"
+          },
+          {
+            "active": [
+              2,
+              3
+            ],
+            "caption": "At coordinate 5 remove 2, leaving only the second interval.",
+            "state": "load on [5,7)=3"
+          },
+          {
+            "active": [
+              3
+            ],
+            "caption": "At coordinate 7 remove 3. The sweep is complete without inspecting interior coordinates.",
+            "state": "load after 7=0 · peak=5"
+          }
+        ]
+      },
+      "questions": [
+        {
+          "title": "Car Pooling",
+          "number": 1094,
+          "url": "https://leetcode.com/problems/car-pooling/",
+          "difficulty": "Medium",
+          "prompt": "Decide whether a vehicle can serve every trip without exceeding its capacity, dropping passengers before picking up new ones at the same location.",
+          "why": "Create +passengers at pickup and −passengers at dropoff. Aggregate deltas by location, sweep in ascending order, and reject if the resulting occupancy exceeds capacity. Half-open trips allow seats freed at a stop to be reused there.",
+          "visual": {
+            "items": [
+              1,
+              3,
+              5,
+              7
+            ],
+            "frames": [
+              {
+                "active": [
+                  0
+                ],
+                "caption": "Trips [2,1,5] and [3,3,7] begin with two passengers at location 1.",
+                "state": "capacity=4 · occupancy=2"
+              },
+              {
+                "active": [
+                  1
+                ],
+                "caption": "At location 3, three more passengers board.",
+                "state": "occupancy=5 > 4 · return false"
+              },
+              {
+                "active": [
+                  2
+                ],
+                "caption": "For capacity 5, the same trips are possible. Two passengers leave at location 5.",
+                "state": "occupancy=3"
+              },
+              {
+                "active": [
+                  3
+                ],
+                "caption": "The final three leave at location 7. Aggregating a drop and pickup at one stop avoids a false overflow.",
+                "state": "capacity 5 → true"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Corporate Flight Bookings",
+          "number": 1109,
+          "url": "https://leetcode.com/problems/corporate-flight-bookings/",
+          "difficulty": "Medium",
+          "prompt": "Return the total reserved seats on each flight after bookings that add seats across inclusive flight-number ranges.",
+          "why": "For a booking [first,last,seats], add seats at first and subtract at last+1. Prefix-sum the differences for flights 1 through n. This performs every range addition in constant time, then reconstructs the final totals in O(n+bookings) time.",
+          "visual": {
+            "items": [
+              1,
+              2,
+              3,
+              4,
+              5
+            ],
+            "frames": [
+              {
+                "active": [
+                  0,
+                  1
+                ],
+                "caption": "Booking [1,2,10] contributes +10 at flight 1 and −10 at flight 3.",
+                "state": "diff at flights 1–5=[10,0,−10,0,0]"
+              },
+              {
+                "active": [
+                  1,
+                  2
+                ],
+                "caption": "Booking [2,3,20] contributes +20 at flight 2 and −20 at flight 4.",
+                "state": "diff=[10,20,−10,−20,0]"
+              },
+              {
+                "active": [
+                  1,
+                  2,
+                  3,
+                  4
+                ],
+                "caption": "Booking [2,5,25] adds 25 at flight 2; its removal is at sentinel flight 6.",
+                "state": "diff=[10,45,−10,−20,0] · diff[6]=−25"
+              },
+              {
+                "active": [
+                  0,
+                  1,
+                  2,
+                  3,
+                  4
+                ],
+                "caption": "Prefix-sum only the real flights, excluding the sentinel.",
+                "state": "answer=[10,55,45,25,25]"
+              }
+            ]
+          }
+        },
+        {
+          "title": "The Skyline Problem",
+          "number": 218,
+          "url": "https://leetcode.com/problems/the-skyline-problem/",
+          "difficulty": "Hard",
+          "prompt": "Return the key points where the maximum active building height changes.",
+          "why": "Sweep all unique starts and ends. At x, push buildings starting there into a max-heap of (height,end), then pop top entries with end≤x until the top is live. The heap top is the visible height, or zero. Emit one point only when this height changes. Expired buried entries can wait until they reach the top.",
+          "visual": {
+            "items": [
+              2,
+              3,
+              7,
+              9,
+              12
+            ],
+            "frames": [
+              {
+                "active": [
+                  0
+                ],
+                "caption": "Buildings are [2,9,10], [3,7,15], [5,12,12]. At x=2 the active maximum is 10.",
+                "state": "emit [2,10]"
+              },
+              {
+                "active": [
+                  1
+                ],
+                "caption": "At x=3, height 15 hides height 10. The building starting at 5 has height 12 and changes no visible height.",
+                "state": "emit [3,15] · no point at 5"
+              },
+              {
+                "active": [
+                  2
+                ],
+                "caption": "At x=7, the height-15 building expires, exposing height 12.",
+                "state": "emit [7,12]"
+              },
+              {
+                "active": [
+                  3,
+                  4
+                ],
+                "caption": "At x=9 height 10 expires while hidden; at x=12 the last building ends.",
+                "state": "no point at 9 · emit [12,0]"
+              }
+            ]
+          }
+        }
+      ]
     }
   ]
 }

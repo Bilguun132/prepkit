@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-11-22T08:00:31+08:00",
+  "lastUpdated": "2026-11-23T08:06:45+08:00",
   "systemSolutions": {
     "rate-limiter": {
       "intro": "A strong design makes the policy explicit, enforces it near the request path, and chooses a clear consistency tradeoff.",
@@ -549,6 +549,31 @@
           "body": "Run rotation as a durable state machine: generate a new external credential, store a pending encrypted version, verify it against the target system, conditionally switch the current alias, wait a defined client migration interval, and revoke the old external credential. Serialize rotations per secret and use idempotent external operation IDs or reconciliation queries so retries do not create uncontrolled credentials. Recover by observing which steps succeeded; no atomic transaction spans an external database and the secrets metadata store. When the target supports two active credentials, overlap enables safe rollout; otherwise rotation may require a coordinated maintenance window. Revoking registry read permission cannot remove cached client bytes or disable a static password at its target. Revoke the external credential or use short-lived dynamic credentials to bound that exposure, accounting for target-side revocation semantics. Encrypt backups, restrict and audit break-glass access, test restore procedures and retain deletion tombstones. Faster policy revocation and less plaintext caching increase dependence on online services; document that tradeoff rather than promising both indefinite offline access and immediate revocation."
         }
       ]
+    },
+    "document-search-engine": {
+      "intro": "Use an inverted index as a recoverable projection of authoritative versioned documents. Separate candidate retrieval and ranking from final permission checks so an index-refresh delay never becomes permission to disclose document content.",
+      "sections": [
+        {
+          "title": "Requirements and capacity",
+          "body": "Support term and phrase queries, explicit filters, ranked pages, versioned updates and deletion, with normal searchable freshness within 30 seconds. Define whether the 300 ms p95 target applies only when every shard responds or permits marked partial results. One billion documents at 5 KB require roughly 5 TB raw text; postings, stored positions, replicas, tombstones and compaction headroom add workload-dependent overhead. Peak 50K updates/s is about 250 MB/s before replication and analysis. Use representative document/query distributions to measure index bytes per document and query CPU rather than inventing a fixed expansion ratio. Provision replicas for 20K QPS and enough ingestion capacity to keep freshness bounded during segment merges."
+        },
+        {
+          "title": "APIs and authoritative data",
+          "body": "PUT /documents/{id} carries tenant-scoped identity, content, metadata and a monotonically increasing document version; use conditional updates and deduplicate retry keys. DELETE creates a versioned tombstone. POST /search accepts query text, allowlisted filters, page size and an opaque cursor. Store authoritative Document(tenant,id,version,content_ref,metadata,state), Policy/ACL revision and an outbox event in the same transaction. Inverted postings map each analyzed term to document IDs, term frequencies and positions; positions enable phrase matching. Keep document length and ranking features alongside searchable fields. Acknowledged source writes are durable independently of when they become searchable."
+        },
+        {
+          "title": "Indexing pipeline and high-level architecture",
+          "body": "Authenticated ingest API → replicated document store and outbox → durable change stream → analyzer workers → document-partitioned index shards with replicas. Route all updates for one document to the same partition and apply only newer document versions; delayed older events cannot resurrect a deleted document. Normalize text consistently at indexing and query time, tokenize by language, and persist term positions. Workers buffer updates then publish immutable segments and an atomic segment manifest; refresh makes new segments visible within the target. Background merges compact segments and tombstones while respecting active reader snapshots. Checkpoint the stream only after a recoverable index commit. Restore a shard from snapshots and replay its stream, or rebuild from the authoritative source."
+        },
+        {
+          "title": "Query execution, ranking, and pagination",
+          "body": "A coordinator resolves the tenant’s shard set and sends an analyzed query to one healthy replica per shard. Each shard intersects or unions postings according to the query, tests phrase positions and metadata filters, scores matching documents with a defined relevance function, and returns its top candidates. Merge by score with a stable document-ID tie-break. If scores must be comparable across shards, use shared ranking statistics from a published statistics snapshot; independent shard-local statistics can distort global ordering. Enforce query limits and deadlines. On timeout, either fail the query or return visibly partial results according to the agreed contract. Use a point-in-time index snapshot with search-after cursors for stable deep pagination, expiring snapshots to bound retained segments. A page assembled across different refresh states is not a globally transactional document snapshot."
+        },
+        {
+          "title": "Permissions, deletes, and operational tradeoffs",
+          "body": "Treat search hits as untrusted candidates until a batch authorization service checks the current policy and current document state. Perform this check before creating snippets, fetching protected fields or revealing titles; never return stale cached snippets solely because the index says access was allowed. If authorization is unavailable, fail closed for protected results. Recheck access on document retrieval as well. Over-fetch and refill candidates within a bounded budget when authorization removes hits, while keeping exact counts, facets and timing from leaking protected document existence; suppress or permission-filter those aggregates. Delete tombstones hide documents immediately at the authoritative disclosure gate while async index cleanup and backup retention follow explicit policies. Revalidate ACLs even for stable point-in-time pagination. Isolate large tenants, cap expensive queries, and monitor refresh age, merge backlog, shard skew, candidate rejection rates, authorization latency and partial responses. More frequent refresh improves freshness but creates more segments and merge work; term sharding reduces some query fanout but complicates joins and hot-term handling, so begin with document sharding."
+        }
+      ]
     }
   },
   "systems": [
@@ -902,6 +927,21 @@
         "Draw workload identity exchange → authenticated gateway → policy evaluation → ciphertext store/cache → key-management decrypt → authorized response. Separate administrative mutations, audit storage and rotation workers.",
         "Deep-dive on envelope encryption, tenant isolation, authorization caching, rotation across external systems, concurrent rotations, key-service outages, audit durability and credentials retained by clients.",
         "Compare plaintext caching with decryption cost, strict online revocation with outage availability, and static secrets with short-lived dynamic credentials. Make clear that revoking read permission does not erase an already disclosed password."
+      ]
+    },
+    {
+      "id": "document-search-engine",
+      "title": "Design a document search engine",
+      "topic": "Inverted indexes and query execution",
+      "tag": "Fresh indexing and permission-safe results",
+      "scenario": "Design a multi-tenant full-text search service for company documents. Clients ingest, update and delete documents, then search terms and phrases with filters and ranked results. Store one billion documents averaging 5 KB, accept 50,000 document updates/s at peak, and serve 20,000 queries/s with a 300 ms p95 target. Normal updates should be searchable within 30 seconds. Documents have access controls, and permission removal must prevent further disclosure even if the search index has not yet refreshed.",
+      "guide": [
+        "Clarify supported query syntax, ranking, phrase matching, filter fields, tenant sizes, deletion guarantees, pagination and access-control freshness. Keep prefix autocomplete outside the initial scope.",
+        "One billion 5 KB documents require about 5 TB of raw text. At 50K updates/s, peak source ingress is roughly 250 MB/s. Index expansion, stored positions, replicas and merge headroom determine actual disk demand; benchmark representative queries to size fanout and replicas.",
+        "Define PUT /documents/{id} with an idempotency key and version, DELETE /documents/{id}, GET /documents/{id}, and POST /search with query, filters, cursor and page size. Model authoritative document/version, change event, tombstone, postings, term positions and ACL revision.",
+        "Draw document API → authoritative store plus transactional outbox → stream → analyzer/index workers → immutable index segments and replicas. Query coordinators route to shards, intersect postings, rank local candidates and merge global results.",
+        "Deep-dive on out-of-order updates, segment refresh/merge, phrase positions, hot tenants, relevance statistics, permission checks before snippets, deletion tombstones and stable pagination.",
+        "Compare document sharding with term sharding, freshness with indexing throughput, exact top K with bounded-time partial results, and stale search candidates with authoritative permission enforcement."
       ]
     }
   ],
