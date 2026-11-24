@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-11-23T08:06:45+08:00",
+  "lastUpdated": "2026-11-24T08:05:28+08:00",
   "systemSolutions": {
     "rate-limiter": {
       "intro": "A strong design makes the policy explicit, enforces it near the request path, and chooses a clear consistency tradeoff.",
@@ -574,6 +574,31 @@
           "body": "Treat search hits as untrusted candidates until a batch authorization service checks the current policy and current document state. Perform this check before creating snippets, fetching protected fields or revealing titles; never return stale cached snippets solely because the index says access was allowed. If authorization is unavailable, fail closed for protected results. Recheck access on document retrieval as well. Over-fetch and refill candidates within a bounded budget when authorization removes hits, while keeping exact counts, facets and timing from leaking protected document existence; suppress or permission-filter those aggregates. Delete tombstones hide documents immediately at the authoritative disclosure gate while async index cleanup and backup retention follow explicit policies. Revalidate ACLs even for stable point-in-time pagination. Isolate large tenants, cap expensive queries, and monitor refresh age, merge backlog, shard skew, candidate rejection rates, authorization latency and partial responses. More frequent refresh improves freshness but creates more segments and merge work; term sharding reduces some query fanout but complicates joins and hot-term handling, so begin with document sharding."
         }
       ]
+    },
+    "content-delivery-network": {
+      "intro": "Keep request serving local to the edge, and distribute versioned routing and invalidation state through a separate control plane. Cache correctness depends on the complete cache key, eligibility rules, and how purge generations interact with in-flight origin fetches.",
+      "sections": [
+        {
+          "title": "Requirements and capacity",
+          "body": "Start with GET/HEAD caching, public immutable assets and explicitly cacheable mutable responses. Define personalized/private behavior, TLS custom domains, purge scope, range requests and allowed stale serving. At 1M requests/s with 100 KB mean cacheable payload, peak edge egress is around 100 GB/s or 800 Gb/s before overhead. A 95% request hit ratio leaves roughly 50K cache misses/s; origin bytes are not necessarily 5% of total because object sizes and popularity differ. Size edge memory/disk tiers from measured working sets and shield caches from regional miss traffic. The 50 ms edge-processing target excludes user-to-edge network latency; state both metrics separately."
+        },
+        {
+          "title": "APIs, cache records, and control plane",
+          "body": "Customer APIs configure verified domains, origins, TLS settings and cache policy; POST /purges accepts an exact URL or tag scope plus an idempotency key, and GET /purges/{id} exposes propagation status. Store tenant/domain routing, origin allowlist, policy revision and durable purge generations in a replicated control store with audit history. A cache key includes tenant/domain, normalized path and allowed query components plus every request attribute needed for the cached representation. Record body reference, status, selected headers, ETag, Last-Modified, expiry, Vary dimensions, policy revision and the purge generations observed when filling. Push signed/versioned configuration and purge events to regions, with snapshot resynchronization when replay history is unavailable."
+        },
+        {
+          "title": "High-level request path and stampede control",
+          "body": "Traffic steering sends clients to a healthy nearby point of presence. The edge terminates TLS, validates host routing and any required authorization, derives the canonical key, and checks a memory/disk cache. A fresh eligible hit returns locally. A miss uses one in-flight fetch per key per cache node so followers share the result. Regional shields coalesce misses across edges before contacting the origin, reducing flash-crowd load. Apply origin concurrency budgets, deadlines and bounded queues; add TTL jitter and proactive refresh for known hot keys. For stale entries, conditional requests with validators can reuse a body after a 304 response. Respect cache-control directives; do not cache responses carrying user-specific state under a public shared key. Treat range caching as a defined whole-object or chunked policy rather than mixing incompatible byte ranges."
+        },
+        {
+          "title": "Purge ordering and bounded propagation",
+          "body": "Assign a durable increasing purge generation per tenant/scope. Edges invalidate matching entries and remember generations long enough to reject old cached objects and delayed fills. An origin fetch captures its relevant generation before starting; before installing or serving the fetched object, compare it with the latest applied generation and discard/revalidate if a purge raced with the fill. This closes the common hole where an old in-flight response repopulates an already purged key. Track acknowledgement by active serving edge and expose pending, completed or failed states. For the 60-second serving bound, require a short renewable serving lease tied to successful control-plane synchronization; lagging or disconnected edges stop serving affected tenant traffic before the bound and require resynchronization to rejoin. Steering changes alone cannot stop existing connections, so the edge must enforce that lease locally. Define a conservative timing margin and validate clock/lease assumptions. Never mark a purge globally completed solely because it was queued."
+        },
+        {
+          "title": "Security, origin failure, and tradeoffs",
+          "body": "Reject unverified hostnames and route origins only through customer-approved destinations, with protection against internal-address fetches and redirects that escape the allowlist. Bound headers and object sizes, normalize keys consistently, and allowlist Vary dimensions to avoid poisoning and unbounded key cardinality. For private content, authorize before cache hits and scope cache entries or bypass shared caching; a signed URL’s lifetime and revocation policy determine access bounds. During origin failure, serve stale only where policy allows and never override a purge or authorization failure with stale fallback. Fail over shields and regions with origin rate limits to avoid a recovery stampede. Monitor request and byte hit ratios, origin fanout, fill-coalescing rates, tail latency, stale age, purge lag, lease expiry and egress. Pull caching reduces storage replication but has cold misses; long TTLs improve hit rates but need reliable invalidation. A CDN purge prevents future edge disclosure under the contract but cannot erase browser caches or previously downloaded copies."
+        }
+      ]
     }
   },
   "systems": [
@@ -942,6 +967,21 @@
         "Draw document API → authoritative store plus transactional outbox → stream → analyzer/index workers → immutable index segments and replicas. Query coordinators route to shards, intersect postings, rank local candidates and merge global results.",
         "Deep-dive on out-of-order updates, segment refresh/merge, phrase positions, hot tenants, relevance statistics, permission checks before snippets, deletion tombstones and stable pagination.",
         "Compare document sharding with term sharding, freshness with indexing throughput, exact top K with bounded-time partial results, and stale search candidates with authoritative permission enforcement."
+      ]
+    },
+    {
+      "id": "content-delivery-network",
+      "title": "Design a content delivery network",
+      "topic": "Edge infrastructure and cache coherence",
+      "tag": "Origin shielding and bounded invalidation",
+      "scenario": "Design a multi-tenant CDN for immutable assets and mutable public web content. Customers configure an origin, cache rules, TLS domains and purge requests. Serve 1 million HTTP requests/s globally at peak with an average 100 KB cacheable response, targeting under 50 ms p95 edge processing time for cache hits, excluding client network transit. Aim for a 95% request hit ratio, bounded origin load during popular-object expiry, and purge propagation to active serving edges within 60 seconds. Define behavior during regional outages and for private or personalized responses.",
+      "guide": [
+        "Clarify supported HTTP methods, response-size limits, cache eligibility, mutable versus versioned URLs, private content, custom domains, range requests, stale serving and the exact purge acknowledgement contract.",
+        "At 1M requests/s and 100 KB responses, edge delivery is roughly 100 GB/s. A 95% request hit ratio leaves about 50K origin fetches/s, but byte savings depend on which objects miss. Estimate hot working set per region and shield hit rates before choosing cache capacity.",
+        "Define customer configuration APIs, POST /purges with idempotency keys, purge-status lookup, and ordinary HTTP delivery. Model tenant/domain routing, origin policy, canonical cache key, cached object metadata, policy revision and purge generation.",
+        "Draw client → traffic steering → edge TLS/auth/cache → regional shield → origin. Separate the replicated control plane from the edge data plane and trace a cold miss, a fresh hit and a revalidation.",
+        "Deep-dive on cache keys and Vary, stampede suppression, cache poisoning, authorization before hits, purge races with in-flight fills, origin failure, stale responses and routing away from lagging edges.",
+        "Compare anycast versus DNS steering, eager replication versus pull caching, TTLs versus invalidation, and bounded purge guarantees versus offline-edge availability. Explain that purging a CDN cannot recall a client’s downloaded bytes."
       ]
     }
   ],

@@ -4855,6 +4855,237 @@
           }
         }
       ]
+    },
+    {
+      "id": "tree-dynamic-programming",
+      "title": "Dynamic programming on trees",
+      "subtitle": "Return a compact subtree summary and combine children after visiting them.",
+      "summary": "Tree DP uses postorder traversal to compute each node’s state from its children. Define precisely what a parent may receive: a height, one extendable path, or a pair of constrained choices. A complete answer inside the subtree may differ from the state returned upward. Because a tree has no shared descendant subproblems, a well-defined bottom-up recurrence visits each node once.",
+      "principles": [
+        "Write the returned-state contract before the recurrence. It must contain exactly what the parent needs.",
+        "Compute children first, then combine their states; define the empty-subtree base case explicitly.",
+        "Separate a path that may extend to the parent from a complete path that can join both children.",
+        "When parent decisions constrain children, return one state per constraint, such as take and skip.",
+        "With constant-size states, time is O(n). Recursive traversal uses O(h) stack; a skewed Python tree may need an explicit postorder stack to avoid recursion-depth limits."
+      ],
+      "conceptFrames": {
+        "items": [
+          "root 1",
+          "left 2",
+          "right 3",
+          "leaf 4",
+          "leaf 5"
+        ],
+        "frames": [
+          {
+            "active": [
+              3,
+              4
+            ],
+            "caption": "Tree edges are 1→2, 1→3, 2→4, 2→5. For a height summary, an empty subtree has height 0.",
+            "state": "leaf height=1+max(0,0)=1"
+          },
+          {
+            "active": [
+              1,
+              3,
+              4
+            ],
+            "caption": "Node 2 receives both leaf heights and returns a single extendable height.",
+            "state": "height(2)=1+max(1,1)=2"
+          },
+          {
+            "active": [
+              2
+            ],
+            "caption": "Node 3 is also a leaf, so its returned height is 1.",
+            "state": "height(3)=1"
+          },
+          {
+            "active": [
+              0,
+              1,
+              2
+            ],
+            "caption": "Root 1 receives heights 2 and 1. It can return height 3, while the complete path through it has 3 edges.",
+            "state": "return height=3 · through-root edges=2+1=3"
+          },
+          {
+            "active": [
+              0,
+              1,
+              2,
+              3,
+              4
+            ],
+            "caption": "The parent summary and full answer measure different things. State that distinction to avoid off-by-one or branching errors.",
+            "state": "one subtree summary per node · O(n) work"
+          }
+        ]
+      },
+      "questions": [
+        {
+          "title": "Diameter of Binary Tree",
+          "number": 543,
+          "url": "https://leetcode.com/problems/diameter-of-binary-tree/",
+          "difficulty": "Easy",
+          "prompt": "Return the largest number of edges on a path between any two nodes; the path need not pass through the root.",
+          "why": "Return subtree height in nodes, using 0 for empty. At each node, left_height+right_height is a complete path length in edges; update the best diameter and return 1+max(left_height,right_height). A leaf contributes diameter 0.",
+          "visual": {
+            "items": [
+              "1",
+              "2",
+              "3",
+              "4",
+              "5"
+            ],
+            "frames": [
+              {
+                "active": [
+                  3,
+                  4
+                ],
+                "caption": "For tree [1,2,3,4,5], nodes 4 and 5 return height 1.",
+                "state": "leaf diameter contribution=0"
+              },
+              {
+                "active": [
+                  1,
+                  3,
+                  4
+                ],
+                "caption": "At node 2, joining its child branches gives path 4→2→5.",
+                "state": "candidate=1+1=2 edges · return height 2"
+              },
+              {
+                "active": [
+                  0,
+                  1,
+                  2
+                ],
+                "caption": "At node 1, left height is 2 and right height is 1.",
+                "state": "candidate=2+1=3 edges"
+              },
+              {
+                "active": [
+                  3,
+                  1,
+                  0,
+                  2
+                ],
+                "caption": "One longest path is 4→2→1→3; count edges rather than nodes.",
+                "state": "answer=3"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Binary Tree Maximum Path Sum",
+          "number": 124,
+          "url": "https://leetcode.com/problems/binary-tree-maximum-path-sum/",
+          "difficulty": "Hard",
+          "prompt": "Find the maximum sum of a nonempty simple path anywhere in a binary tree.",
+          "why": "Return node.val+max(0,left_gain,right_gain) as one extendable branch. Update a global best with node.val+max(0,left_gain)+max(0,right_gain), which can join both children locally. Initialize the best to negative infinity so all-negative trees still select one node.",
+          "visual": {
+            "items": [
+              "−10",
+              "9",
+              "20",
+              "15",
+              "7"
+            ],
+            "frames": [
+              {
+                "active": [
+                  3,
+                  4
+                ],
+                "caption": "Tree edges are −10→9, −10→20, 20→15, 20→7. Leaves return their own positive values.",
+                "state": "gain(15)=15 · gain(7)=7"
+              },
+              {
+                "active": [
+                  2,
+                  3,
+                  4
+                ],
+                "caption": "At node 20, joining both children yields a complete path, but only one branch may be returned upward.",
+                "state": "complete=20+15+7=42 · return gain=35"
+              },
+              {
+                "active": [
+                  0,
+                  1,
+                  2
+                ],
+                "caption": "At −10, the complete candidate is −10+9+35=34, below the existing best.",
+                "state": "best remains 42"
+              },
+              {
+                "active": [
+                  3,
+                  2,
+                  4
+                ],
+                "caption": "The best path stays entirely in the right subtree. If all values were negative, keep the least-negative node.",
+                "state": "answer=42 · path 15→20→7"
+              }
+            ]
+          }
+        },
+        {
+          "title": "House Robber III",
+          "number": 337,
+          "url": "https://leetcode.com/problems/house-robber-iii/",
+          "difficulty": "Medium",
+          "prompt": "Choose tree nodes with maximum total value while never choosing a node and its direct child together.",
+          "why": "Return (take,skip). Taking a node forces both children to be skipped: take=value+left.skip+right.skip. Skipping it allows either state independently in each child: skip=max(left)+max(right). Return max(root.take,root.skip); this avoids recomputing grandchildren.",
+          "visual": {
+            "items": [
+              "3 root",
+              "2 left",
+              "3 right",
+              "3 under left",
+              "1 under right"
+            ],
+            "frames": [
+              {
+                "active": [
+                  3,
+                  4
+                ],
+                "caption": "The root has children 2 and 3; their single children are 3 and 1. Leaves return their take/skip choices.",
+                "state": "leaf 3=(3,0) · leaf 1=(1,0)"
+              },
+              {
+                "active": [
+                  1,
+                  3
+                ],
+                "caption": "At node 2, taking yields 2; skipping allows its child 3.",
+                "state": "state(2)=(2,3)"
+              },
+              {
+                "active": [
+                  2,
+                  4
+                ],
+                "caption": "At right child 3, taking yields 3; skipping yields 1.",
+                "state": "state(right 3)=(3,1)"
+              },
+              {
+                "active": [
+                  0,
+                  3,
+                  4
+                ],
+                "caption": "Taking root gives 3+3+1=7. Skipping root gives max(2,3)+max(3,1)=6.",
+                "state": "root=(7,6) · answer=7"
+              }
+            ]
+          }
+        }
+      ]
     }
   ]
 }
