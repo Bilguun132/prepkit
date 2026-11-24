@@ -73,6 +73,18 @@
                 "state": "answer = [1, 2]"
               }
             ]
+          },
+          "walkthrough": {
+            "input": "numbers = [2, 7, 11, 15], target = 9",
+            "output": "[1, 2] (the problem counts positions from 1)",
+            "steps": [
+              "Start at Python indices 0 and 3. Their values sum to 17, so move the right pointer left.",
+              "At indices 0 and 2 the sum is 13. Move the right pointer left again.",
+              "Now 2 + 7 = 9. Convert indices 0 and 1 to the requested positions 1 and 2."
+            ],
+            "whyItWorks": "Each move discards an endpoint that cannot form the target with any remaining value.",
+            "cost": "O(n) time because either pointer moves at most n positions in total. O(1) extra space.",
+            "pitfall": "Use the sort order already provided and return 1-based positions."
           }
         },
         {
@@ -98,13 +110,13 @@
               {
                 "left": 0,
                 "right": 8,
-                "caption": "Area = min(1, 7) × 8 = 8. The left wall is shorter, so move left.",
+                "caption": "Area = min(1, 7) × 8 = 8. The left wall is shorter, so advance the left pointer one position to the right.",
                 "state": "best = 8"
               },
               {
                 "left": 1,
                 "right": 8,
-                "caption": "Area = min(8, 7) × 7 = 49. The right wall is shorter, so move right.",
+                "caption": "Area = min(8, 7) × 7 = 49. The right wall is shorter, so move the right pointer one position to the left.",
                 "state": "best = 49"
               },
               {
@@ -114,6 +126,18 @@
                 "state": "best = 49"
               }
             ]
+          },
+          "walkthrough": {
+            "input": "heights = [1, 8, 6, 2, 5, 4, 8, 3, 7]",
+            "output": "49",
+            "steps": [
+              "At the ends, the width is 8 and the shorter wall has height 1. The area is 8 × 1 = 8.",
+              "Move past height 1. Now the walls at indices 1 and 8 have width 7 and shorter height 7. Record area 49.",
+              "Move the right pointer this time because height 7 is shorter. Keep computing areas and stop when the pointers meet. The best stays 49."
+            ],
+            "whyItWorks": "Keeping the shorter wall and moving the other inward cannot improve the current area because width decreases and the height is still capped by that shorter wall.",
+            "cost": "O(n) time and O(1) extra space.",
+            "pitfall": "Use the smaller wall height and the distance between indices. Sorting the input would change those distances."
           }
         },
         {
@@ -153,11 +177,57 @@
                 "right": 5,
                 "caption": "Fix −1. The triplet [−1, −1, 2] sums to zero.",
                 "state": "−1 + −1 + 2 = 0 ✓"
+              },
+              {
+                "pivot": 1,
+                "left": 3,
+                "right": 4,
+                "caption": "Move both pointers inward after the first match. The second match uses 0 and 1. Both triplets are distinct.",
+                "state": "−1 + 0 + 1 = 0 ✓"
               }
             ]
+          },
+          "walkthrough": {
+            "input": "nums = [-1, 0, 1, 2, -1, -4]",
+            "output": "[[-1, -1, 2], [-1, 0, 1]]",
+            "steps": [
+              "Sort to [-4, -1, -1, 0, 1, 2]. Fix -4 and search the suffix for a pair totaling 4. Even the two largest values sum to 3, so there is no match.",
+              "Fix the first -1. The next -1 and last 2 sum to 1, giving [-1, -1, 2]. Move both pointers inward.",
+              "The values 0 and 1 also sum to 1. Record [-1, 0, 1]. Skip the next fixed -1 because it would repeat work."
+            ],
+            "whyItWorks": "Fixing one value reduces the task to finding all pairs with a known sum in a sorted suffix.",
+            "cost": "O(n²) time. The pointer scan uses O(1) extra space beyond results, plus any memory used by the sort.",
+            "pitfall": "Skip duplicate values at the same role after a match. Equal values can still be valid at two different positions."
           }
         }
-      ]
+      ],
+      "lesson": {
+        "intuition": "A pointer here is just a number that tells you which position to look at. Imagine a sorted row of cards. To make a target sum, start with the first and last card. If the sum is too big, the last card cannot pair with any card still in the row because the first card is already the smallest. Cross off the last card and try again.",
+        "terms": [
+          {
+            "term": "Index",
+            "definition": "A position in the list. Python starts counting at zero."
+          },
+          {
+            "term": "Sorted order",
+            "definition": "Reading left to right, values stay the same or increase."
+          },
+          {
+            "term": "Candidate range",
+            "definition": "The part of the list that still might contain the answer."
+          }
+        ],
+        "steps": [
+          "Put one pointer at each end of the sorted list.",
+          "Add the values at the pointers. If the sum matches, return those positions.",
+          "If the sum is too small, move the left pointer one step right. If it is too large, move the right pointer one step left.",
+          "Stop when the two pointers meet. A pair must use two different positions."
+        ],
+        "check": {
+          "question": "With [2, 7, 11, 15] and target 13, which pointer moves first?",
+          "answer": "Move the right pointer left. Even the smallest available value, 2, makes 15 too large. The next pair is 2 + 11 = 13."
+        }
+      }
     },
     {
       "id": "sliding-window",
@@ -240,6 +310,18 @@
                 "state": "window = “cab” · best = 3"
               }
             ]
+          },
+          "walkthrough": {
+            "input": "s = \"abcabcbb\"",
+            "output": "3, for example \"abc\"",
+            "steps": [
+              "Read a, b, and c. All are different, so the best length is 3.",
+              "At the second a, its last position is 0. Set left to 1 so the window becomes bca.",
+              "Apply the same rule for each later duplicate. A duplicate outside the current window cannot push left backwards."
+            ],
+            "whyItWorks": "A duplicate inside the window forces the start past the previous copy. Keeping the earliest valid start gives the longest window for this end position.",
+            "cost": "O(n) time with a dictionary of last positions and O(u) space for u distinct characters.",
+            "pitfall": "Use left = max(left, last_seen[char] + 1) when you have seen the character before."
           }
         },
         {
@@ -285,6 +367,18 @@
                 "state": "answer = “BANC”"
               }
             ]
+          },
+          "walkthrough": {
+            "input": "s = \"ADOBECODEBANC\", t = \"ABC\"",
+            "output": "\"BANC\"",
+            "steps": [
+              "Read until the first C. ADOBEC now covers A, B, and C. Save it before moving left past A.",
+              "Expand again until a later A restores coverage. Remove surplus letters and save each shorter valid window.",
+              "At the final C, shrink past the leading surplus letters until the window is BANC. Removing B now breaks coverage."
+            ],
+            "whyItWorks": "For each right edge, shrinking while all required letter counts still hold finds the shortest valid window ending there.",
+            "cost": "O(|s| + |t|) time because each edge advances at most |s| times. O(u) space for counts of the u letters required by t.",
+            "pitfall": "Count repeated requirements. For t = \"AAB\", one A and one B is insufficient."
           }
         },
         {
@@ -320,13 +414,64 @@
               {
                 "left": 1,
                 "right": 4,
-                "caption": "ABAB fits one replacement for a repeated-character window of length 4.",
-                "state": "best = 4"
+                "caption": "After one removal, ABAB has two As and two Bs. It still needs two replacements, so move left again.",
+                "state": "2 replacements · still invalid"
+              },
+              {
+                "left": 2,
+                "right": 4,
+                "caption": "BAB contains two Bs and one A. It is valid again. The best length seen remains 4.",
+                "state": "1 replacement · window length 3"
+              },
+              {
+                "left": 2,
+                "right": 5,
+                "caption": "Extend to BABB. Change the single A to B to get another valid window of length 4.",
+                "state": "1 replacement · best = 4"
               }
             ]
+          },
+          "walkthrough": {
+            "input": "s = \"AABABBA\", k = 1",
+            "output": "4, for example \"AABA\"",
+            "steps": [
+              "In AABA, there are three As. Change the single B to A, making a run of length 4.",
+              "Extending to AABAB requires two replacements, because the most common letter occurs three times out of five. Trim from the left until the window is valid.",
+              "Keep extending and trimming. Another valid length-four window is BABB after changing A to B."
+            ],
+            "whyItWorks": "Keeping the most common letter minimizes replacements, so the number to change is window length minus its frequency.",
+            "cost": "Scanning 26 uppercase letter counts to get the true maximum is O(26n) = O(n) time and O(26) space.",
+            "pitfall": "Check the count of the most common letter inside the current window. The most common letter across the whole input can differ."
           }
         }
-      ]
+      ],
+      "lesson": {
+        "intuition": "Think of a sliding window as a highlight over neighboring characters. The right edge includes one new character at a time. When the highlight breaks a rule, move its left edge until the rule is satisfied again. Keep counts or positions so you can update the highlight without reading all of it again.",
+        "terms": [
+          {
+            "term": "Contiguous",
+            "definition": "Every element between the first and last positions is included."
+          },
+          {
+            "term": "Window",
+            "definition": "The current range from left to right, inclusive. Its length is right − left + 1."
+          },
+          {
+            "term": "Valid",
+            "definition": "The current window satisfies the problem’s rule, such as having no repeated letters."
+          }
+        ],
+        "steps": [
+          "Write the rule in one sentence. For example, “each letter appears at most once.”",
+          "Move the right edge to include one new character and update its count.",
+          "For a longest valid window, move left until the rule holds, then record the length. For a shortest covering window, keep shrinking while the coverage still holds.",
+          "Save the best length or range seen across all right positions."
+        ],
+        "check": {
+          "question": "You have the window abc, then the next character is a. What is the smallest change that restores validity?",
+          "answer": "Remove the earlier a. The window becomes bca. The later a remains in the window."
+        }
+      }
     },
     {
       "id": "hash-maps",
@@ -403,6 +548,18 @@
                 "state": "answer indices = [0, 1]"
               }
             ]
+          },
+          "walkthrough": {
+            "input": "nums = [2, 7, 11, 15], target = 9",
+            "output": "[0, 1]",
+            "steps": [
+              "For 2, look up the number needed to reach 9, which is 7. The dictionary is empty, so store 2 at index 0.",
+              "For 7, the number needed is 2. The dictionary already holds index 0.",
+              "Return index 0 and your current index 1."
+            ],
+            "whyItWorks": "Every pair has a later index. When the scan reaches it, the earlier number is already in the dictionary.",
+            "cost": "O(n) expected time and O(n) extra space.",
+            "pitfall": "Look up the needed number before inserting the current one so the two positions are distinct."
           }
         },
         {
@@ -447,6 +604,18 @@
                 "state": "3 groups"
               }
             ]
+          },
+          "walkthrough": {
+            "input": "words = [\"eat\", \"tea\", \"tan\", \"ate\", \"nat\", \"bat\"]",
+            "output": "Groups [\"eat\", \"tea\", \"ate\"], [\"tan\", \"nat\"], [\"bat\"] in any order",
+            "steps": [
+              "Sort the characters of eat to get the key aet. Start a list under that key.",
+              "tea and ate produce the same key, so append both original words to the same list.",
+              "tan and nat produce ant. bat produces abt. Return the dictionary’s lists."
+            ],
+            "whyItWorks": "Two words with exactly the same letters and counts produce the same sorted string.",
+            "cost": "For n words of length at most k, O(nk log k) time and O(nk) space including stored keys and groups.",
+            "pitfall": "Keep duplicate letters in the key. A set of characters would group ab and aab together incorrectly."
           }
         },
         {
@@ -475,6 +644,7 @@
               },
               {
                 "active": [
+                  1,
                   3,
                   4,
                   5
@@ -490,9 +660,48 @@
                 "state": "answer = 4"
               }
             ]
+          },
+          "walkthrough": {
+            "input": "nums = [100, 4, 200, 1, 3, 2]",
+            "output": "4 for the run [1, 2, 3, 4]",
+            "steps": [
+              "Build a set of the numbers. When you inspect 4, notice that 3 exists, so 4 cannot start a run.",
+              "At 1, check 0. It is absent, so 1 starts a run. Look up 2, 3, 4, and stop at missing 5.",
+              "Other starts such as 100 and 200 each give length 1. The best length is 4."
+            ],
+            "whyItWorks": "Only the smallest member of each run lacks a predecessor. Starting there means the successful forward lookups across all runs visit each distinct number once.",
+            "cost": "O(n) expected time and O(n) extra space.",
+            "pitfall": "Iterate the set itself so repeated copies of a run’s starting value do not make you count that run again."
           }
         }
-      ]
+      ],
+      "lesson": {
+        "intuition": "A Python dictionary is like an index in the back of a book. Give it a key and it quickly retrieves the associated value. While scanning an array you can record answers to questions you will need later, such as where a number first appeared or how many times you have seen it.",
+        "terms": [
+          {
+            "term": "Key",
+            "definition": "The thing you look up, such as a number or a normalized word."
+          },
+          {
+            "term": "Value",
+            "definition": "The information stored for that key, such as an index, a count, or a list of words."
+          },
+          {
+            "term": "Set",
+            "definition": "A collection used to ask whether a key exists when no associated value is needed."
+          }
+        ],
+        "steps": [
+          "Decide what repeated lookup is slowing down the simple solution.",
+          "Choose a key that lets you answer that lookup directly.",
+          "Choose the value you need to keep. Use a set when presence alone is enough.",
+          "Scan the input and check whether to look up before updating. For matching two positions, looking up first avoids matching a value with itself."
+        ],
+        "check": {
+          "question": "For nums = [3, 3] and target = 6, why should you look up 3 before recording the current index?",
+          "answer": "The first 3 sees no earlier 3. The second 3 retrieves index 0, so the returned indices are 0 and 1."
+        }
+      }
     },
     {
       "id": "binary-search",
@@ -4977,6 +5186,18 @@
                 "state": "answer=3"
               }
             ]
+          },
+          "walkthrough": {
+            "input": "root = [1, 2, 3, 4, 5] in level order",
+            "output": "3 edges",
+            "steps": [
+              "The leaves 3, 4, and 5 return height 1.",
+              "Node 2 can join the branches ending at 4 and 5, making a path of two edges. Its own returned height is 2.",
+              "The root receives heights 2 and 1. Joining them makes a three-edge path, such as 4 → 2 → 1 → 3."
+            ],
+            "whyItWorks": "Every path reaches a highest node. Considering both branches at every node eventually considers that highest point of the longest path.",
+            "cost": "O(n) time. Recursive stack space is O(h), where h is the height.",
+            "pitfall": "Measure the returned height in nodes and the diameter in edges. A tree with one node has diameter 0."
           }
         },
         {
@@ -5031,6 +5252,18 @@
                 "state": "answer=42 · path 15→20→7"
               }
             ]
+          },
+          "walkthrough": {
+            "input": "root = [-10, 9, 20, null, null, 15, 7]",
+            "output": "42 from 15 → 20 → 7",
+            "steps": [
+              "Leaves 15 and 7 return their own values. Node 20 can join them into a complete path worth 42.",
+              "Only one branch can continue upward from 20, so return 20 + 15 = 35.",
+              "At the root, the best joined path there is -10 + 9 + 35 = 34. Keep 42 as the overall best."
+            ],
+            "whyItWorks": "A simple path can join at most two child branches at its highest node. A branch passed to the parent can extend into at most one child.",
+            "cost": "O(n) time and O(h) recursive stack space.",
+            "pitfall": "An all-negative tree still needs a nonempty path. Start the overall best at negative infinity or at the root’s value."
           }
         },
         {
@@ -5083,9 +5316,49 @@
                 "state": "root=(7,6) · answer=7"
               }
             ]
+          },
+          "walkthrough": {
+            "input": "root = [3, 2, 3, null, 3, null, 1]",
+            "output": "7",
+            "steps": [
+              "Return two scores at each node, one for taking it and one for skipping it. The two lowest leaves return (3, 0) and (1, 0).",
+              "The left child returns (2, 3) and the right child returns (3, 1). Taking a parent requires skipping that parent’s child.",
+              "Taking the root gives 3 + 3 + 1 = 7. Skipping it lets each side choose its better score, giving 3 + 3 = 6."
+            ],
+            "whyItWorks": "Once the current node’s choice is fixed, the child subtrees have no edges between them, so their best allowed scores can be added independently.",
+            "cost": "O(n) time and O(h) recursive stack space.",
+            "pitfall": "When skipping a node, either take or skip each child. Do not automatically take both children."
           }
         }
-      ]
+      ],
+      "lesson": {
+        "intuition": "Picture a family tree. If you want to know how far the lowest descendant is, each child can answer for their own branch first. Once both answers are ready, you can answer for the parent. Tree dynamic programming uses the same idea. Each branch sends up a small summary, and the parent uses those summaries to solve its larger part of the problem.",
+        "terms": [
+          {
+            "term": "Subtree",
+            "definition": "A node with all of its descendants. Children are the nodes immediately below it."
+          },
+          {
+            "term": "Postorder",
+            "definition": "Visit both children before doing the work at their parent."
+          },
+          {
+            "term": "State",
+            "definition": "The specific information a node reports to its parent, such as one height or two possible scores."
+          }
+        ],
+        "steps": [
+          "Write down what an empty branch returns. For height measured in nodes, the answer is zero.",
+          "At a node, ask each child for its branch height.",
+          "Return one plus the larger height. The extra one counts the current node.",
+          "If you need the longest path anywhere, also check the path that joins both child branches at this node. Save that result separately because the parent can continue only one branch."
+        ],
+        "check": {
+          "question": "The left branch has height 2 and the right has height 1. How many edges are on the path that joins them through their parent?",
+          "answer": "Three. Height 2 means two edges from the parent down the left side, and height 1 means one edge from the parent down the right."
+        }
+      }
     }
-  ]
+  ],
+  "featuredTopicId": "tree-dynamic-programming"
 }

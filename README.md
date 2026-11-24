@@ -14,11 +14,17 @@ Then open <http://localhost:4173>. The app uses `topics.json` and `content.json`
 
 The algorithm lesson and its visual walkthroughs are local. Coding problems open on LeetCode, where you can practice in your preferred language and use its judge.
 
-System design questions include a discussion guide and a **Show a strong example design** button. These are examples to learn from; other designs can also be valid when their tradeoffs fit the requirements.
+System design questions include a discussion guide and a **Show a strong example design** button. The worked example opens with a board showing how requests and data move between components.
 
 ## Update the practice content
 
-Edit `topics.json` to add daily algorithm topics, concepts, sample questions, LeetCode links, and per-question visual steps. Edit `content.json` for system design prompts and trend briefings. The daily scheduled refresh appends one new algorithm topic to `topics.json` and one system design scenario plus worked example to `content.json`. The newest entries become the daily lessons, and the topic and system design libraries let you browse older material. The refresh should preserve existing entries and never overwrite the UI code.
+The daily refresh at 8 AM Singapore time prioritizes the curriculum gap that would most help someone prepare for an interview. It can improve an existing topic, expand its practice questions, or add a distinct topic. Keep existing IDs and question links so the libraries and saved notes still work.
+
+- In `topics.json`, `featuredTopicId` chooses the coding lesson on Today. For a beginner lesson, add `lesson` with `intuition`, `terms` (pairs of `term` and `definition`), `steps`, and `check` (`question` and `answer`). Pair the lesson with a concrete animated example. Each question can include a `walkthrough` with `input`, `output`, `steps`, `whyItWorks`, `cost`, and `pitfall`. Use official LeetCode links and retain the per-question visual frames.
+- In `content.json`, `featuredSystemId` chooses the system design case on Today. Each worked example in `systemSolutions` can contain a `board` with one or more flows. A flow has a `title` and ordered `steps`, each with a component `name` and a short `detail`. Use separate flows for distinct paths such as reads and writes.
+- Review engineering practice against primary sources daily. Set `trend.reviewed` when the research is complete. Change `trend.updated` only for a substantive update, keep prior briefings in `trendHistory`, and list the supporting `sources` with `title`, `url`, and `note`. Use ISO dates in Singapore time. Keep the existing `sourceTitle`/`sourceUrl` and `readingTitle`/`readingUrl`/`readingSummary` fields synchronized for the Today cards and archive.
+
+If a featured ID is absent, Today uses the most recent library entry.
 
 ## Publish with GitHub Pages
 

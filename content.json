@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-11-24T08:05:28+08:00",
+  "lastUpdated": "2026-11-24T21:36:07+08:00",
   "systemSolutions": {
     "rate-limiter": {
       "intro": "A strong design makes the policy explicit, enforces it near the request path, and chooses a clear consistency tradeoff.",
@@ -19,6 +19,29 @@
         {
           "title": "Failure handling and operations",
           "body": "Decide whether a limiter outage fails open or closed by endpoint risk. Protect the backing store with timeouts and local fallback limits. Track allowed and rejected requests, store latency, hot keys, and policy changes."
+        }
+      ],
+      "board": [
+        {
+          "title": "Check a request",
+          "steps": [
+            {
+              "name": "Client",
+              "detail": "Sends an API request"
+            },
+            {
+              "name": "Gateway",
+              "detail": "Identifies caller and rate policy"
+            },
+            {
+              "name": "Counter store",
+              "detail": "Atomically refills and consumes a token"
+            },
+            {
+              "name": "Gateway decision",
+              "detail": "Forward or return 429"
+            }
+          ]
         }
       ]
     },
@@ -41,6 +64,42 @@
           "title": "Operations",
           "body": "Add rate limits, phishing detection, abuse reporting, and click analytics through an asynchronous event stream so analytics do not slow redirects."
         }
+      ],
+      "board": [
+        {
+          "title": "Create a link",
+          "steps": [
+            {
+              "name": "Client",
+              "detail": "Submits the destination URL"
+            },
+            {
+              "name": "Create API",
+              "detail": "Allocates a unique short code"
+            },
+            {
+              "name": "Link store",
+              "detail": "Persists the code and destination"
+            }
+          ]
+        },
+        {
+          "title": "Follow a link",
+          "steps": [
+            {
+              "name": "Browser",
+              "detail": "Opens the short code"
+            },
+            {
+              "name": "Redirect service",
+              "detail": "Reads the cache or link store"
+            },
+            {
+              "name": "Browser",
+              "detail": "Follows the redirect to the destination"
+            }
+          ]
+        }
       ]
     },
     "notification-service": {
@@ -61,6 +120,33 @@
         {
           "title": "Visibility and resilience",
           "body": "Track queue age, provider success, retry counts, and end-to-end delivery time. Isolate provider outages and allow priority traffic to continue."
+        }
+      ],
+      "board": [
+        {
+          "title": "Send a notification",
+          "steps": [
+            {
+              "name": "Producer",
+              "detail": "Submits a notification and deduplication key"
+            },
+            {
+              "name": "Notification service",
+              "detail": "Checks preferences and records the request"
+            },
+            {
+              "name": "Channel queues",
+              "detail": "Separate email, push, and SMS jobs"
+            },
+            {
+              "name": "Delivery worker",
+              "detail": "Calls provider and records the attempt"
+            },
+            {
+              "name": "Provider callback",
+              "detail": "Updates delivery status"
+            }
+          ]
         }
       ]
     },
@@ -83,6 +169,46 @@
           "title": "Scale and quality",
           "body": "Partition inboxes by user, cache the first page, and cap feed fan-out work. Monitor freshness, latency, duplicate rate, and engagement quality."
         }
+      ],
+      "board": [
+        {
+          "title": "Publish a post",
+          "steps": [
+            {
+              "name": "Author",
+              "detail": "Creates a post"
+            },
+            {
+              "name": "Post service",
+              "detail": "Stores post and emits an event"
+            },
+            {
+              "name": "Fanout workers",
+              "detail": "Add post IDs to follower inboxes where appropriate"
+            }
+          ]
+        },
+        {
+          "title": "Read the feed",
+          "steps": [
+            {
+              "name": "Reader",
+              "detail": "Opens a feed page"
+            },
+            {
+              "name": "Feed service",
+              "detail": "Combines inbox entries and posts from large accounts"
+            },
+            {
+              "name": "Ranking and filtering",
+              "detail": "Order and hydrate eligible posts"
+            },
+            {
+              "name": "Reader",
+              "detail": "Receives results with a cursor"
+            }
+          ]
+        }
       ]
     },
     "file-storage": {
@@ -103,6 +229,33 @@
         {
           "title": "Reliability",
           "body": "Use checksums, replication, lifecycle policies, and restore tests. Monitor upload completion, sync lag, integrity errors, and storage costs."
+        }
+      ],
+      "board": [
+        {
+          "title": "Upload and sync a file",
+          "steps": [
+            {
+              "name": "Client",
+              "detail": "Creates an upload session"
+            },
+            {
+              "name": "Object storage",
+              "detail": "Stores uploaded bytes"
+            },
+            {
+              "name": "Metadata service",
+              "detail": "Commits the new file version"
+            },
+            {
+              "name": "Change log",
+              "detail": "Records the version change"
+            },
+            {
+              "name": "Other clients",
+              "detail": "Read changes with a cursor"
+            }
+          ]
         }
       ]
     },
@@ -125,6 +278,33 @@
           "title": "Alerts and operations",
           "body": "Evaluate alert rules close to the data, deduplicate notifications, and monitor ingestion lag, query latency, dropped points, and storage growth."
         }
+      ],
+      "board": [
+        {
+          "title": "Ingest and query metrics",
+          "steps": [
+            {
+              "name": "Agent",
+              "detail": "Batches labeled time series"
+            },
+            {
+              "name": "Ingest gateway",
+              "detail": "Validates payload and enforces limits"
+            },
+            {
+              "name": "Partitioned stream",
+              "detail": "Buffers points by series"
+            },
+            {
+              "name": "Time-series store",
+              "detail": "Persists points and rollups"
+            },
+            {
+              "name": "Query service",
+              "detail": "Reads time ranges for dashboards"
+            }
+          ]
+        }
       ]
     },
     "job-scheduler": {
@@ -145,6 +325,33 @@
         {
           "title": "Scale and correctness",
           "body": "Use UTC timestamps, define recurrence and daylight-saving semantics, spread bursts with jitter, and track scheduling lag, retries, duplicate claims, and worker saturation."
+        }
+      ],
+      "board": [
+        {
+          "title": "Run scheduled work",
+          "steps": [
+            {
+              "name": "Job API",
+              "detail": "Stores the schedule definition"
+            },
+            {
+              "name": "Scheduler",
+              "detail": "Creates a durable run when due"
+            },
+            {
+              "name": "Queue",
+              "detail": "Delivers work to a worker"
+            },
+            {
+              "name": "Worker",
+              "detail": "Executes with a run ID for deduplication"
+            },
+            {
+              "name": "Run store",
+              "detail": "Records outcome or retry state"
+            }
+          ]
         }
       ]
     },
@@ -167,6 +374,33 @@
           "title": "Reliability and operations",
           "body": "Discuss ordering per conversation, retries, idempotency, offline queues, and regional failover. Call out the main latency, availability, correctness, and cost tradeoffs; instrument the system and plan gradual capacity changes."
         }
+      ],
+      "board": [
+        {
+          "title": "Send and receive a message",
+          "steps": [
+            {
+              "name": "Sender",
+              "detail": "Sends a message over a persistent connection"
+            },
+            {
+              "name": "Gateway",
+              "detail": "Authenticates the sender and conversation"
+            },
+            {
+              "name": "Message store",
+              "detail": "Persists and orders messages within the conversation"
+            },
+            {
+              "name": "Fanout workers",
+              "detail": "Deliver to online gateways"
+            },
+            {
+              "name": "Recipient",
+              "detail": "Receives live updates or catches up later"
+            }
+          ]
+        }
       ]
     },
     "video-streaming": {
@@ -187,6 +421,46 @@
         {
           "title": "Reliability and operations",
           "body": "Deliver segments through a CDN; cover access control, hot content, and processing retries. Call out the main latency, availability, correctness, and cost tradeoffs; instrument the system and plan gradual capacity changes."
+        }
+      ],
+      "board": [
+        {
+          "title": "Prepare a video",
+          "steps": [
+            {
+              "name": "Uploader",
+              "detail": "Uploads source video"
+            },
+            {
+              "name": "Object storage",
+              "detail": "Keeps the original bytes"
+            },
+            {
+              "name": "Transcode workers",
+              "detail": "Produce renditions and segments"
+            },
+            {
+              "name": "Publisher",
+              "detail": "Makes the manifest available when ready"
+            }
+          ]
+        },
+        {
+          "title": "Play a video",
+          "steps": [
+            {
+              "name": "Player",
+              "detail": "Loads the manifest"
+            },
+            {
+              "name": "CDN",
+              "detail": "Serves cached segments or fetches from origin"
+            },
+            {
+              "name": "Player",
+              "detail": "Adapts bitrate to current bandwidth"
+            }
+          ]
         }
       ]
     },
@@ -209,6 +483,42 @@
           "title": "Reliability and operations",
           "body": "Discuss surge, duplicate requests, trip updates, payment idempotency, and safety. Call out the main latency, availability, correctness, and cost tradeoffs; instrument the system and plan gradual capacity changes."
         }
+      ],
+      "board": [
+        {
+          "title": "Keep driver locations fresh",
+          "steps": [
+            {
+              "name": "Driver app",
+              "detail": "Streams location to the geo index"
+            },
+            {
+              "name": "Geo index",
+              "detail": "Stores recent locations by cell and expires stale entries."
+            }
+          ]
+        },
+        {
+          "title": "Match rider and driver",
+          "steps": [
+            {
+              "name": "Rider app",
+              "detail": "Creates a ride request"
+            },
+            {
+              "name": "Matching service",
+              "detail": "Queries nearby cells and ranks eligible drivers"
+            },
+            {
+              "name": "Offer service",
+              "detail": "Commits the first valid acceptance"
+            },
+            {
+              "name": "Trip service",
+              "detail": "Notifies both parties"
+            }
+          ]
+        }
       ]
     },
     "search-autocomplete": {
@@ -229,6 +539,46 @@
         {
           "title": "Reliability and operations",
           "body": "Stream anonymized usage events into offline aggregation and index refresh. Call out the main latency, availability, correctness, and cost tradeoffs; instrument the system and plan gradual capacity changes."
+        }
+      ],
+      "board": [
+        {
+          "title": "Prepare suggestions",
+          "steps": [
+            {
+              "name": "Query events",
+              "detail": "Supply completed search terms"
+            },
+            {
+              "name": "Aggregation job",
+              "detail": "Counts popularity and filters terms"
+            },
+            {
+              "name": "Index builder",
+              "detail": "Publishes a regional suggestion index"
+            }
+          ]
+        },
+        {
+          "title": "Serve suggestions",
+          "steps": [
+            {
+              "name": "Client",
+              "detail": "Sends a typed prefix"
+            },
+            {
+              "name": "Suggestion service",
+              "detail": "Looks up the prefix in cache or index"
+            },
+            {
+              "name": "Ranker",
+              "detail": "Sorts relevant suggestions"
+            },
+            {
+              "name": "Client",
+              "detail": "Shows top matches"
+            }
+          ]
         }
       ]
     },
@@ -251,6 +601,33 @@
           "title": "Reliability and operations",
           "body": "Discuss ACL checks, versioning, deletion recovery, and CDN delivery. Call out the main latency, availability, correctness, and cost tradeoffs; instrument the system and plan gradual capacity changes."
         }
+      ],
+      "board": [
+        {
+          "title": "Update and synchronize",
+          "steps": [
+            {
+              "name": "Client",
+              "detail": "Uploads content through a session"
+            },
+            {
+              "name": "Object store",
+              "detail": "Persists file chunks"
+            },
+            {
+              "name": "Metadata service",
+              "detail": "Advances the file version"
+            },
+            {
+              "name": "Change log",
+              "detail": "Records the update"
+            },
+            {
+              "name": "Other devices",
+              "detail": "Fetch changes since their cursor"
+            }
+          ]
+        }
       ]
     },
     "web-crawler": {
@@ -271,6 +648,33 @@
         {
           "title": "Reliability and operations",
           "body": "Discuss retries, traps, malicious content, and pipeline observability. Call out the main latency, availability, correctness, and cost tradeoffs; instrument the system and plan gradual capacity changes."
+        }
+      ],
+      "board": [
+        {
+          "title": "Fetch and discover pages",
+          "steps": [
+            {
+              "name": "URL frontier",
+              "detail": "Schedules normalized URLs by host"
+            },
+            {
+              "name": "Fetcher",
+              "detail": "Applies robots policy and per-host limits"
+            },
+            {
+              "name": "Parser",
+              "detail": "Extracts content and links"
+            },
+            {
+              "name": "Storage",
+              "detail": "Records content fingerprints and fetch state"
+            },
+            {
+              "name": "URL frontier",
+              "detail": "Schedules new eligible links and recrawls"
+            }
+          ]
         }
       ]
     },
@@ -293,6 +697,33 @@
           "title": "Reliability and operations",
           "body": "Handle reconnect cursors, duplicate operations, presence, and version history. Call out the main latency, availability, correctness, and cost tradeoffs; instrument the system and plan gradual capacity changes."
         }
+      ],
+      "board": [
+        {
+          "title": "Apply an edit",
+          "steps": [
+            {
+              "name": "Editor",
+              "detail": "Sends a local operation"
+            },
+            {
+              "name": "Connection gateway",
+              "detail": "Checks document membership"
+            },
+            {
+              "name": "Collaboration service",
+              "detail": "Orders or merges concurrent edits"
+            },
+            {
+              "name": "Operation log",
+              "detail": "Persists accepted changes"
+            },
+            {
+              "name": "Peers",
+              "detail": "Apply the broadcast or replay missed changes"
+            }
+          ]
+        }
       ]
     },
     "distributed-cache": {
@@ -313,6 +744,33 @@
         {
           "title": "Reliability and operations",
           "body": "Discuss cache outage fallback, overload protection, and hit-rate observability. Call out the main latency, availability, correctness, and cost tradeoffs; instrument the system and plan gradual capacity changes."
+        }
+      ],
+      "board": [
+        {
+          "title": "Read a cached key",
+          "steps": [
+            {
+              "name": "Application",
+              "detail": "Requests a key"
+            },
+            {
+              "name": "Cache client",
+              "detail": "Routes the key to its shard"
+            },
+            {
+              "name": "Shard",
+              "detail": "Returns a live cached value or a miss"
+            },
+            {
+              "name": "Application",
+              "detail": "Fetches from the source of truth on a miss"
+            },
+            {
+              "name": "Shard",
+              "detail": "Stores the eligible fill with a TTL"
+            }
+          ]
         }
       ]
     },
@@ -335,6 +793,33 @@
           "title": "Reliability and operations",
           "body": "Discuss idempotency, fraud, retries, and reconciliation of payment and inventory. Call out the main latency, availability, correctness, and cost tradeoffs; instrument the system and plan gradual capacity changes."
         }
+      ],
+      "board": [
+        {
+          "title": "Reserve and buy a seat",
+          "steps": [
+            {
+              "name": "Buyer",
+              "detail": "Chooses a seat"
+            },
+            {
+              "name": "Inventory service",
+              "detail": "Creates an atomic, expiring hold"
+            },
+            {
+              "name": "Payment provider",
+              "detail": "Authorizes the charge"
+            },
+            {
+              "name": "Order service",
+              "detail": "Confirms the purchase against the hold"
+            },
+            {
+              "name": "Ticket service",
+              "detail": "Issues the confirmed ticket"
+            }
+          ]
+        }
       ]
     },
     "webhook-platform": {
@@ -355,6 +840,33 @@
         {
           "title": "Security, operations, and tradeoffs",
           "body": "Require HTTPS, validate endpoint ownership at registration, block private and link-local address ranges to reduce SSRF risk, and recheck DNS/redirect destinations. Keep signing secrets in a secret manager and support rotation. Encrypt stored payloads, apply tenant-scoped access checks, and set retention limits. Track queue age, delivery latency and success by tenant, retry rate, dead-letter count, and worker saturation; alert on growing oldest-message age. Partitioning by endpoint preserves local ordering and fair throttling but creates hot partitions; shard oversized endpoints and relax order only when the contract allows. Keep the event log durable, scale consumers horizontally, and make outbox publishing and state transitions idempotent."
+        }
+      ],
+      "board": [
+        {
+          "title": "Deliver an event",
+          "steps": [
+            {
+              "name": "Producer",
+              "detail": "Sends a durable event"
+            },
+            {
+              "name": "Subscription service",
+              "detail": "Finds matching endpoints"
+            },
+            {
+              "name": "Endpoint queues",
+              "detail": "Isolate slow destinations"
+            },
+            {
+              "name": "Delivery workers",
+              "detail": "Sign and send HTTP requests"
+            },
+            {
+              "name": "Attempt store",
+              "detail": "Records the outcome for retries and status"
+            }
+          ]
         }
       ]
     },
@@ -377,6 +889,33 @@
           "title": "Security, availability, and reconciliation",
           "body": "Use a token vault so card numbers do not enter ordinary service logs or databases; encrypt sensitive tokens and scope access. Verify callback signatures and timestamps. Partition intents and ledger queries by merchant/account, but keep each ledger transaction atomic. Apply provider-specific timeouts, circuit breakers, and bounded retry with jitter. A scheduled reconciliation job compares provider settlement reports with internal attempts and ledger entries, records discrepancies, and routes them for repair without mutating the audit trail. Monitor unknown outcomes, duplicate requests, callback lag, authorization rate, reconciliation gaps, and queue age. Prefer returning a pending state over risking a duplicate charge during an outage."
         }
+      ],
+      "board": [
+        {
+          "title": "Process a payment",
+          "steps": [
+            {
+              "name": "Merchant",
+              "detail": "Sends a request with an idempotency key"
+            },
+            {
+              "name": "Payments API",
+              "detail": "Records the intent and outbox event"
+            },
+            {
+              "name": "Provider worker",
+              "detail": "Sends an authorization request"
+            },
+            {
+              "name": "Provider callback",
+              "detail": "Advances payment state"
+            },
+            {
+              "name": "Ledger",
+              "detail": "Records the resulting money movement"
+            }
+          ]
+        }
       ]
     },
     "feature-flag-platform": {
@@ -397,6 +936,50 @@
         {
           "title": "Reliability, security, and tradeoffs",
           "body": "Keep the last valid snapshot in durable local storage and continue evaluating it during a control-plane outage; apply a configured maximum staleness policy and expose stale state to the host application. If a signature fails or a snapshot is malformed, reject it and retain the prior version. Enforce tenant-scoped authorization on writes, encrypt secrets, and avoid placing sensitive targeting attributes in telemetry. Use idempotent versioned updates, audit all edits, and support rollback by publishing a prior logical configuration as a new version. Local evaluation gives low latency and avoids a central hot path, at the cost of delayed revocation and rules being distributed to clients. Server-side evaluation protects rule confidentiality but adds network latency and service load; support both with an explicit policy."
+        }
+      ],
+      "board": [
+        {
+          "title": "Publish a rule",
+          "steps": [
+            {
+              "name": "Admin API",
+              "detail": "Validates and versions the edit"
+            },
+            {
+              "name": "Metadata store",
+              "detail": "Commits rules and an outbox event"
+            },
+            {
+              "name": "Compiler",
+              "detail": "Signs an environment snapshot"
+            },
+            {
+              "name": "Regional distributor",
+              "detail": "Offers the new version"
+            }
+          ]
+        },
+        {
+          "title": "Evaluate a flag",
+          "steps": [
+            {
+              "name": "Regional distributor",
+              "detail": "Sends a versioned snapshot"
+            },
+            {
+              "name": "SDK cache",
+              "detail": "Verifies and applies it atomically"
+            },
+            {
+              "name": "SDK evaluator",
+              "detail": "Uses local rules and stable rollout buckets"
+            },
+            {
+              "name": "Application",
+              "detail": "Receives the selected variant"
+            }
+          ]
         }
       ]
     },
@@ -423,6 +1006,50 @@
           "title": "Scaling, isolation, and operational tradeoffs",
           "body": "Apply tenant byte-rate and storage quotas, bounded producer queues, broker disk watermarks, and retriable overload responses. Batch and compress records to improve throughput at the cost of additional latency. Hot keys still overload a single partition; split the key space only when the application accepts the changed ordering boundary. Increasing partition count can move a key between partitions, so use an explicit migration barrier or stable partition mapping when ordering must survive expansion. Rebalance replicas with bandwidth caps and preserve replication headroom. Authenticate clients, authorize topic/group access, encrypt traffic, and monitor publish latency, quorum health, disk saturation, replication lag, consumer lag, and retention headroom. Per-partition ordering scales well; global ordering collapses writes into a coordination bottleneck. A broker can guarantee durable logs and defined delivery semantics, while application side effects still require their own correctness design."
         }
+      ],
+      "board": [
+        {
+          "title": "Append an event",
+          "steps": [
+            {
+              "name": "Producer",
+              "detail": "Maps a key to a partition"
+            },
+            {
+              "name": "Partition leader",
+              "detail": "Appends the event"
+            },
+            {
+              "name": "Replica quorum",
+              "detail": "Persists the log entry"
+            },
+            {
+              "name": "Producer",
+              "detail": "Receives durable acknowledgement"
+            }
+          ]
+        },
+        {
+          "title": "Consume and resume",
+          "steps": [
+            {
+              "name": "Consumer group",
+              "detail": "Finds its partition assignment"
+            },
+            {
+              "name": "Broker",
+              "detail": "Returns records from the next offset"
+            },
+            {
+              "name": "Worker",
+              "detail": "Processes events idempotently"
+            },
+            {
+              "name": "Coordinator",
+              "detail": "Stores the committed next offset"
+            }
+          ]
+        }
       ]
     },
     "distributed-tracing": {
@@ -447,6 +1074,50 @@
         {
           "title": "Isolation, failure behavior, and tradeoffs",
           "body": "SDK buffers must have hard byte limits and drop policies, exporting drop counters without blocking application requests. Collectors can spool to disk within quota; once full, reject new batches or shed lower-priority telemetry visibly. Head sampling is cheaper but can discard errors before their outcome is known; tail sampling captures outcomes at higher buffering and routing cost. Never claim all production errors are retained when SDKs can drop spans or a tenant exceeds quota: the target applies to eligible spans received by collectors within the stated policy. Sanitize sensitive attributes, cap attribute sizes, and index only approved fields to prevent cardinality explosions. Use parent IDs for causality and per-span durations for timing; cross-host clock skew makes exact global timestamp order unreliable. Monitor accepted/dropped spans, partial traces, sampling reasons, memory pressure, queue age, query latency, tenant usage, and storage expiry. Keep metrics and logging operationally independent enough to diagnose a tracing outage."
+        }
+      ],
+      "board": [
+        {
+          "title": "Collect and assemble a trace",
+          "steps": [
+            {
+              "name": "SDK",
+              "detail": "Emits spans with trace context"
+            },
+            {
+              "name": "Collector",
+              "detail": "Batches and buffers spans"
+            },
+            {
+              "name": "Partitioned stream",
+              "detail": "Groups spans by trace ID"
+            },
+            {
+              "name": "Tail sampler",
+              "detail": "Retains useful traces after a bounded wait"
+            },
+            {
+              "name": "Storage and index",
+              "detail": "Persist chunks and searchable summaries"
+            }
+          ]
+        },
+        {
+          "title": "Inspect a trace",
+          "steps": [
+            {
+              "name": "Engineer",
+              "detail": "Searches by service or trace ID"
+            },
+            {
+              "name": "Query API",
+              "detail": "Reads summaries or the trace manifest"
+            },
+            {
+              "name": "Trace viewer",
+              "detail": "Assembles spans and marks missing parents"
+            }
+          ]
         }
       ]
     },
@@ -473,6 +1144,50 @@
           "title": "Season closure, reliability, and tradeoffs",
           "body": "Close a season by atomically changing its state to closing and recording an admission cutoff; reject later submissions. Drain every accepted outbox event through that cutoff, wait for the view checkpoints to catch up, and write a versioned immutable final snapshot before marking the season closed. Reconcile index entries and counts against authoritative scores periodically; use rate limits, payload validation, audit trails and anti-cheat checks at trusted ingestion. Monitor acceptance latency, view lag, version gaps, cross-range transaction aborts, count contention and query age. Read replicas and caches can serve a published snapshot but may be stale. A single ordered owner is simpler and gives atomic rank updates; sharding improves capacity while making exact global ranks and score moves more expensive. The durable store and replay log preserve accepted updates even if a ranking cache is lost."
         }
+      ],
+      "board": [
+        {
+          "title": "Apply a score update",
+          "steps": [
+            {
+              "name": "Game server",
+              "detail": "Submits a stable event ID"
+            },
+            {
+              "name": "Score store",
+              "detail": "Deduplicates and commits a player version"
+            },
+            {
+              "name": "View worker",
+              "detail": "Applies versioned updates"
+            },
+            {
+              "name": "Ranked index",
+              "detail": "Publishes an ordered snapshot"
+            }
+          ]
+        },
+        {
+          "title": "Read an exact rank",
+          "steps": [
+            {
+              "name": "Player",
+              "detail": "Requests a rank or nearby scores"
+            },
+            {
+              "name": "Query service",
+              "detail": "Reads a single index snapshot"
+            },
+            {
+              "name": "Ranked index",
+              "detail": "Provides counts and rank within each range"
+            },
+            {
+              "name": "Player",
+              "detail": "Receives rank and snapshot version"
+            }
+          ]
+        }
       ]
     },
     "distributed-lock-service": {
@@ -497,6 +1212,46 @@
         {
           "title": "Waiting, recovery, and tradeoffs",
           "body": "Use revision-based watches: first read the busy lease with a revision, then watch from that revision so a release between read and subscription is not lost. If history is compacted, reread and restart. Add bounded wait queues, jittered retry, tenant quotas and cancellation so one hot lock does not exhaust a shard. Fairness requires a durable ordered waiter policy and comes with extra state; a simple retry API is not strictly FIFO. Shard migration needs a fenced routing epoch and one authoritative grant path so old and new groups cannot both grant. Monitor grant latency, renewal failures, expired leases, consensus quorum health, hot keys, watch fanout, fencing rejections and deduplication retention. Short TTLs recover abandoned work sooner but increase renewal load and sensitivity to pauses; longer TTLs reduce traffic but delay takeover. Multi-resource atomic locking and cross-region synchronous availability require additional coordination beyond the initial scope."
+        }
+      ],
+      "board": [
+        {
+          "title": "Grant a lease",
+          "steps": [
+            {
+              "name": "Worker",
+              "detail": "Requests ownership of a resource"
+            },
+            {
+              "name": "Router",
+              "detail": "Selects the authoritative shard"
+            },
+            {
+              "name": "Replicated shard",
+              "detail": "Commits an exclusive grant"
+            },
+            {
+              "name": "Worker",
+              "detail": "Receives lease ID and fencing token"
+            }
+          ]
+        },
+        {
+          "title": "Protect the resource",
+          "steps": [
+            {
+              "name": "Worker",
+              "detail": "Sends a write with its token"
+            },
+            {
+              "name": "Protected store",
+              "detail": "Atomically checks the token and applies eligible writes"
+            },
+            {
+              "name": "Store response",
+              "detail": "Accepts current writes and rejects older tokens"
+            }
+          ]
         }
       ]
     },
@@ -523,6 +1278,54 @@
           "title": "Failure recovery and tradeoffs",
           "body": "Concurrent publishes serialize on the immutable version key. Retried finalize calls return the original result; an object-store success followed by a database failure is repaired through idempotent retry or delayed orphan collection. Store tag updates with compare-and-set revision checks so competing releases cannot silently overwrite each other. Outbox consumers are idempotent and can replay invalidations and search indexing. Give immutable blobs long cache lifetimes; mutable metadata uses short TTLs and validators, with quarantine checks outside an indefinitely cached artifact URL. Garbage collection must prove no published references exist and use a grace period longer than upload/retry windows, protected by a reference/GC state protocol against concurrent publication. Monitor missing-blob errors, publish lag, scan backlog, origin bandwidth, metadata cache age, authorization failures and quarantine propagation. Replicated read metadata improves availability but can be briefly stale; the authoritative publish endpoint returns the committed version while global caches converge."
         }
+      ],
+      "board": [
+        {
+          "title": "Publish an immutable version",
+          "steps": [
+            {
+              "name": "Maintainer",
+              "detail": "Creates a scoped upload session"
+            },
+            {
+              "name": "Staging store",
+              "detail": "Receives artifact bytes"
+            },
+            {
+              "name": "Validation worker",
+              "detail": "Checks digest and manifest"
+            },
+            {
+              "name": "Artifact store",
+              "detail": "Persists immutable bytes"
+            },
+            {
+              "name": "Registry DB",
+              "detail": "Commits version metadata"
+            }
+          ]
+        },
+        {
+          "title": "Install a version",
+          "steps": [
+            {
+              "name": "Package client",
+              "detail": "Resolves version and integrity digest"
+            },
+            {
+              "name": "Download service",
+              "detail": "Checks access"
+            },
+            {
+              "name": "CDN",
+              "detail": "Fetches or serves immutable bytes"
+            },
+            {
+              "name": "Client",
+              "detail": "Verifies digest before install"
+            }
+          ]
+        }
       ]
     },
     "secrets-manager": {
@@ -547,6 +1350,54 @@
         {
           "title": "Rotation, revocation, and tradeoffs",
           "body": "Run rotation as a durable state machine: generate a new external credential, store a pending encrypted version, verify it against the target system, conditionally switch the current alias, wait a defined client migration interval, and revoke the old external credential. Serialize rotations per secret and use idempotent external operation IDs or reconciliation queries so retries do not create uncontrolled credentials. Recover by observing which steps succeeded; no atomic transaction spans an external database and the secrets metadata store. When the target supports two active credentials, overlap enables safe rollout; otherwise rotation may require a coordinated maintenance window. Revoking registry read permission cannot remove cached client bytes or disable a static password at its target. Revoke the external credential or use short-lived dynamic credentials to bound that exposure, accounting for target-side revocation semantics. Encrypt backups, restrict and audit break-glass access, test restore procedures and retain deletion tombstones. Faster policy revocation and less plaintext caching increase dependence on online services; document that tradeoff rather than promising both indefinite offline access and immediate revocation."
+        }
+      ],
+      "board": [
+        {
+          "title": "Read a version",
+          "steps": [
+            {
+              "name": "Workload",
+              "detail": "Presents verified identity"
+            },
+            {
+              "name": "Policy service",
+              "detail": "Checks current authorization"
+            },
+            {
+              "name": "Secret store",
+              "detail": "Provides ciphertext and wrapped key"
+            },
+            {
+              "name": "Key service",
+              "detail": "Unwraps the data key"
+            },
+            {
+              "name": "Read service",
+              "detail": "Audits before releasing plaintext"
+            }
+          ]
+        },
+        {
+          "title": "Rotate a credential",
+          "steps": [
+            {
+              "name": "Rotation worker",
+              "detail": "Creates a pending credential"
+            },
+            {
+              "name": "Verification",
+              "detail": "Tests it against its target"
+            },
+            {
+              "name": "Alias store",
+              "detail": "Switches current version"
+            },
+            {
+              "name": "Target system",
+              "detail": "Revokes the old credential after migration"
+            }
+          ]
         }
       ]
     },
@@ -573,6 +1424,54 @@
           "title": "Permissions, deletes, and operational tradeoffs",
           "body": "Treat search hits as untrusted candidates until a batch authorization service checks the current policy and current document state. Perform this check before creating snippets, fetching protected fields or revealing titles; never return stale cached snippets solely because the index says access was allowed. If authorization is unavailable, fail closed for protected results. Recheck access on document retrieval as well. Over-fetch and refill candidates within a bounded budget when authorization removes hits, while keeping exact counts, facets and timing from leaking protected document existence; suppress or permission-filter those aggregates. Delete tombstones hide documents immediately at the authoritative disclosure gate while async index cleanup and backup retention follow explicit policies. Revalidate ACLs even for stable point-in-time pagination. Isolate large tenants, cap expensive queries, and monitor refresh age, merge backlog, shard skew, candidate rejection rates, authorization latency and partial responses. More frequent refresh improves freshness but creates more segments and merge work; term sharding reduces some query fanout but complicates joins and hot-term handling, so begin with document sharding."
         }
+      ],
+      "board": [
+        {
+          "title": "Index a document",
+          "steps": [
+            {
+              "name": "Document API",
+              "detail": "Accepts a versioned update"
+            },
+            {
+              "name": "Document store",
+              "detail": "Commits data and outbox event"
+            },
+            {
+              "name": "Analyzer",
+              "detail": "Tokenizes text and records positions"
+            },
+            {
+              "name": "Index shards",
+              "detail": "Publish versioned search segments"
+            }
+          ]
+        },
+        {
+          "title": "Search with permissions",
+          "steps": [
+            {
+              "name": "Search client",
+              "detail": "Sends terms and filters"
+            },
+            {
+              "name": "Coordinator",
+              "detail": "Queries the relevant shards"
+            },
+            {
+              "name": "Ranker",
+              "detail": "Merges candidate scores"
+            },
+            {
+              "name": "Authorization gate",
+              "detail": "Checks current access"
+            },
+            {
+              "name": "Response",
+              "detail": "Returns eligible titles and snippets"
+            }
+          ]
+        }
       ]
     },
     "content-delivery-network": {
@@ -597,6 +1496,58 @@
         {
           "title": "Security, origin failure, and tradeoffs",
           "body": "Reject unverified hostnames and route origins only through customer-approved destinations, with protection against internal-address fetches and redirects that escape the allowlist. Bound headers and object sizes, normalize keys consistently, and allowlist Vary dimensions to avoid poisoning and unbounded key cardinality. For private content, authorize before cache hits and scope cache entries or bypass shared caching; a signed URL’s lifetime and revocation policy determine access bounds. During origin failure, serve stale only where policy allows and never override a purge or authorization failure with stale fallback. Fail over shields and regions with origin rate limits to avoid a recovery stampede. Monitor request and byte hit ratios, origin fanout, fill-coalescing rates, tail latency, stale age, purge lag, lease expiry and egress. Pull caching reduces storage replication but has cold misses; long TTLs improve hit rates but need reliable invalidation. A CDN purge prevents future edge disclosure under the contract but cannot erase browser caches or previously downloaded copies."
+        }
+      ],
+      "board": [
+        {
+          "title": "Serve a request",
+          "steps": [
+            {
+              "name": "Browser",
+              "detail": "Requests an asset"
+            },
+            {
+              "name": "Traffic steering",
+              "detail": "Finds a healthy nearby edge"
+            },
+            {
+              "name": "Edge cache",
+              "detail": "Serves a fresh hit or requests a fill"
+            },
+            {
+              "name": "Regional shield",
+              "detail": "Coalesces identical misses"
+            },
+            {
+              "name": "Origin",
+              "detail": "Supplies the asset to fill the caches"
+            }
+          ]
+        },
+        {
+          "title": "Publish a purge",
+          "steps": [
+            {
+              "name": "Customer",
+              "detail": "Requests a URL or tag purge"
+            },
+            {
+              "name": "Control plane",
+              "detail": "Commits a new generation"
+            },
+            {
+              "name": "Distribution stream",
+              "detail": "Sends it to serving edges"
+            },
+            {
+              "name": "Edge cache",
+              "detail": "Invalidates older entries and checks in-flight fills"
+            },
+            {
+              "name": "Purge status",
+              "detail": "Reports serving-edge acknowledgements"
+            }
+          ]
         }
       ]
     }
@@ -986,27 +1937,73 @@
     }
   ],
   "trend": {
-    "title": "From copilots to agentic workflows",
-    "intro": "Production agent engineering centers on measuring outcomes, tracing the full run, and keeping permissions and escalation paths clear.",
+    "title": "Test what an agent actually changed",
+    "intro": "A useful agent evaluation checks two things. Did the task succeed in the system, and did the agent get there through an acceptable sequence of actions? Start with an outcome you can inspect, then use the trace to understand failures.",
     "points": [
       {
-        "title": "Measure outcomes",
-        "text": "Build task-specific evaluations into the development loop."
+        "title": "Verify the outcome directly",
+        "text": "For an agent that books a meeting, inspect the test calendar for one event with the right time and invitees. Also test a retry and check that it does not create a duplicate."
       },
       {
-        "title": "Observe the whole run",
-        "text": "Trace tool calls, latency, cost, and handoffs."
+        "title": "Use the trace to diagnose failures",
+        "text": "If the event is missing or wrong, inspect the tool inputs and responses. That can tell you whether the agent misread the request, used the wrong calendar, or ignored a conflict."
       },
       {
-        "title": "Keep control legible",
-        "text": "Bound permissions and define human escalation paths."
+        "title": "Turn a failed run into a repeatable check",
+        "text": "Save a scrubbed or synthetic example with the starting calendar and expected end state. Rerun it after changing instructions, tools, or the model. Track passing cases, latency, and cost so a fix has visible tradeoffs."
       }
     ],
-    "sourceTitle": "State of Agent Engineering",
-    "sourceUrl": "https://www.langchain.com/state-of-agent-engineering",
-    "readingTitle": "State of AI Engineering",
-    "readingUrl": "https://www.datadoghq.com/state-of-ai-engineering/",
-    "readingSummary": "Agent reliability is becoming an engineering discipline: evaluation, observability, and deliberate context design show up alongside model choice.",
-    "updated": "2026-11-12"
-  }
+    "sourceTitle": "Anthropic · Demystifying evals for AI agents",
+    "sourceUrl": "https://www.anthropic.com/research/demystifying-evals-for-ai-agents",
+    "readingTitle": "OpenAI Cookbook · Build an Agent Improvement Loop",
+    "readingUrl": "https://developers.openai.com/cookbook/examples/agents_sdk/agent_improvement_loop",
+    "readingSummary": "Demonstrates gathering feedback and failed traces, changing the agent harness, and rerunning evaluations against the revised candidate.",
+    "sources": [
+      {
+        "title": "Anthropic · Demystifying evals for AI agents",
+        "url": "https://www.anthropic.com/research/demystifying-evals-for-ai-agents",
+        "note": "Distinguishes the trace of a trial from what actually changed in the environment. Describes combining programmatic checks with human or model judgment."
+      },
+      {
+        "title": "Anthropic · Harness design for long-running application development",
+        "url": "https://www.anthropic.com/research/harness-design-long-running-apps",
+        "note": "Reports a case study using structured handoffs and a separate evaluator to review generated work against explicit criteria."
+      },
+      {
+        "title": "OpenAI Cookbook · Build an Agent Improvement Loop",
+        "url": "https://developers.openai.com/cookbook/examples/agents_sdk/agent_improvement_loop",
+        "note": "Demonstrates gathering feedback and failed traces, changing the agent harness, and rerunning evaluations against the revised candidate."
+      }
+    ],
+    "reviewSummary": "This briefing turns general advice about evaluations and traces into a concrete test you can explain in an interview. The linked case studies show how their authors apply it. Results depend on the workflow and the quality of its checks.",
+    "updated": "2026-11-24",
+    "reviewed": "2026-11-24"
+  },
+  "featuredSystemId": "content-delivery-network",
+  "trendHistory": [
+    {
+      "title": "From copilots to agentic workflows",
+      "intro": "Production agent engineering centers on measuring outcomes, tracing the full run, and keeping permissions and escalation paths clear.",
+      "points": [
+        {
+          "title": "Measure outcomes",
+          "text": "Build task-specific evaluations into the development loop."
+        },
+        {
+          "title": "Observe the whole run",
+          "text": "Trace tool calls, latency, cost, and handoffs."
+        },
+        {
+          "title": "Keep control legible",
+          "text": "Bound permissions and define human escalation paths."
+        }
+      ],
+      "sourceTitle": "State of Agent Engineering",
+      "sourceUrl": "https://www.langchain.com/state-of-agent-engineering",
+      "readingTitle": "State of AI Engineering",
+      "readingUrl": "https://www.datadoghq.com/state-of-ai-engineering/",
+      "readingSummary": "Agent reliability is becoming an engineering discipline: evaluation, observability, and deliberate context design show up alongside model choice.",
+      "updated": "2026-11-12"
+    }
+  ]
 }
