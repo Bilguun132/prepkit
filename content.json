@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-11-24T21:36:07+08:00",
+  "lastUpdated": "2026-11-25T08:06:00+08:00",
   "systemSolutions": {
     "rate-limiter": {
       "intro": "A strong design makes the policy explicit, enforces it near the request path, and chooses a clear consistency tradeoff.",
@@ -1550,6 +1550,96 @@
           ]
         }
       ]
+    },
+    "distributed-analytics-query": {
+      "intro": "Use a coordinator to pin input snapshots and break each SQL query into stages. Workers scan immutable files and exchange intermediate data. A durable query record and an atomic result manifest give callers a clear view of completed work.",
+      "sections": [
+        {
+          "title": "Requirements and sizing",
+          "body": "Start with read-only SQL and approximate capacity from bytes actually scanned. Pin one catalog snapshot per table at submission or planning, then document that each table is repeatable. If statements must see a common multi-table point in time, the catalog must offer a shared commit boundary. At 40 GB per eligible dashboard query and a 30-second objective, the scan alone needs about 1.3 GB/s. Two hundred equivalent scans would need around 267 GB/s aggregate before shuffle and processing. Reserve an execution budget smaller than the total latency target and confirm admission limits through load testing. Long batch jobs can trade queue time for throughput."
+        },
+        {
+          "title": "API and data model",
+          "body": "POST /queries takes SQL, workload class, and an idempotency key and returns a query ID. GET /queries/{id} returns status, bytes scanned, and an error if the job fails. POST /queries/{id}/cancel requests cancellation. GET /queries/{id}/results takes an opaque cursor bound to the completed result manifest. Store Query(id, tenant, principal, statement hash, state, deadline, snapshots), StageAttempt(query, stage, partition, generation, output reference), and ResultManifest(page references, schema, expiry). Authorize catalog access when planning, apply row and column policies at execution, and verify current access before returning saved results. Treat generated SQL and query IDs as inputs requiring validation and authorization."
+        },
+        {
+          "title": "Plan and execute a query",
+          "body": "The query API authenticates and durably records a request. An admission controller meters each tenant and separates dashboard and batch queues. The coordinator resolves table snapshot manifests and builds a plan. Push filters and column selection into workers that read file splits from object storage. In a query that groups sales by region, workers can compute local totals, shuffle partial totals to workers responsible for each region, and combine them. Broadcast only a join input that safely fits in worker memory. Partition both large inputs by join key for a larger join. Store final pages in object storage and publish a manifest atomically when all results are ready."
+        },
+        {
+          "title": "Recover from failures",
+          "body": "Give each task attempt its own output location. The coordinator selects one accepted attempt per logical partition and records that choice before downstream stages consume its output. After a worker fails, reschedule missing tasks against the same snapshot. Readers use the accepted manifest and cannot see a retry’s partial output. For coordinator loss, recover recorded decisions under a fenced coordinator lease. An older coordinator cannot publish after ownership changes. If the plan state is insufficient for recovery, restart the query from its pinned inputs within its retry and deadline budget, or mark it failed. Use compare-and-set terminal states so cancel and publish have a clear winner. Reclaim abandoned attempt files after a grace period."
+        },
+        {
+          "title": "Skew, isolation, and tradeoffs",
+          "body": "Use separate execution pools or reserved capacity for dashboard traffic and enforce per-tenant memory, scan bytes, and concurrency ceilings. Prune partitions and project only needed columns. Track the largest task versus the median to detect skew. For grouped sums, split an oversized key across workers for partial aggregation, then combine those partials under the original key. Use spill or a durable shuffle for long jobs where recomputing intermediate work is expensive. In-memory exchange saves writes on small queries but can require stage recomputation after a failure. Monitor queue time separately from execution time, and report bytes scanned, shuffle bytes, spill, retries, and tenant saturation."
+        }
+      ],
+      "board": [
+        {
+          "title": "Plan and run a query",
+          "steps": [
+            {
+              "name": "Query API",
+              "detail": "Authenticates and records the SQL request."
+            },
+            {
+              "name": "Admission controller",
+              "detail": "Queues work and allocates tenant capacity."
+            },
+            {
+              "name": "Coordinator and catalog",
+              "detail": "Pin input snapshots and plan stages."
+            },
+            {
+              "name": "Scan workers",
+              "detail": "Read file splits and apply filters."
+            },
+            {
+              "name": "Exchange and final workers",
+              "detail": "Redistribute rows and combine results."
+            }
+          ]
+        },
+        {
+          "title": "Publish and page results",
+          "steps": [
+            {
+              "name": "Final workers",
+              "detail": "Write result pages under an attempt ID."
+            },
+            {
+              "name": "Coordinator",
+              "detail": "Selects successful output and commits a manifest."
+            },
+            {
+              "name": "Results API",
+              "detail": "Checks current access and reads a page."
+            },
+            {
+              "name": "Client",
+              "detail": "Receives rows and a cursor for the next page."
+            }
+          ]
+        },
+        {
+          "title": "Recover a failed worker",
+          "steps": [
+            {
+              "name": "Task scheduler",
+              "detail": "Detects failure and starts a fresh attempt."
+            },
+            {
+              "name": "Replacement worker",
+              "detail": "Reads the pinned snapshot or accepted exchange output."
+            },
+            {
+              "name": "Coordinator",
+              "detail": "Accepts one attempt and discards competing output."
+            }
+          ]
+        }
+      ]
     }
   },
   "systems": [
@@ -1934,53 +2024,106 @@
         "Deep-dive on cache keys and Vary, stampede suppression, cache poisoning, authorization before hits, purge races with in-flight fills, origin failure, stale responses and routing away from lagging edges.",
         "Compare anycast versus DNS steering, eager replication versus pull caching, TTLs versus invalidation, and bounded purge guarantees versus offline-edge availability. Explain that purging a CDN cannot recall a client’s downloaded bytes."
       ]
+    },
+    {
+      "id": "distributed-analytics-query",
+      "title": "Design a distributed SQL analytics service",
+      "topic": "Distributed query execution",
+      "tag": "Snapshot reads, shuffles, and workload isolation",
+      "scenario": "Build a service where analysts submit read-only SQL against 10 PB of existing columnar tables in object storage. Support filters, joins, grouped totals, query status, and paged results. Up to 200 admitted queries can run concurrently. Aim for a 30-second p95 response for approved dashboard query shapes and allow longer batch runs. A query must use a consistent table snapshot even as new files arrive. A worker failure should be recoverable without duplicating result rows.",
+      "guide": [
+        "Clarify read-only SQL features, consistency across tables, interactive versus batch latency, result expiry, tenant quotas, and cancellation.",
+        "A dashboard scan that reads 40 GB after pruning needs 1.3 GB/s just to scan within 30 seconds. If 200 such scans overlapped, they would need about 267 GB/s before shuffle, planning, or result delivery. Use measured scan rates and query mix to choose admission limits.",
+        "Sketch query submission, status, cancel, and paged results. Identify job ID, owner, query plan, snapshot IDs, stage attempts, and result manifest.",
+        "Draw a coordinator producing a plan, workers reading file splits, a shuffle exchanging groups or join keys, and a final stage publishing results.",
+        "Discuss partition pruning, join choice, hot keys, memory spill, worker or coordinator failure, and authorization when reading saved results.",
+        "Compare skipping queues to favor latency versus enforcing resource limits, and transient data exchange versus durable exchange for retries."
+      ]
     }
   ],
   "trend": {
-    "title": "Test what an agent actually changed",
-    "intro": "A useful agent evaluation checks two things. Did the task succeed in the system, and did the agent get there through an acceptable sequence of actions? Start with an outcome you can inspect, then use the trace to understand failures.",
+    "title": "Let agents investigate incidents with read-only access",
+    "intro": "Use an agent to assemble incident evidence and prepare a handoff for the on-call engineer. For example, it can compare when checkout errors started with when a deployment rolled out and show the traces behind its hypothesis. The incident process still owns the change decision.",
     "points": [
       {
-        "title": "Verify the outcome directly",
-        "text": "For an agent that books a meeting, inspect the test calendar for one event with the right time and invitees. Also test a retry and check that it does not create a duplicate."
+        "title": "Start with a scoped evidence account",
+        "text": "Give the investigator access to the affected service’s health metrics, selected logs and deployment history. Ask it to link the evidence for each hypothesis and say what observation would rule it out."
       },
       {
-        "title": "Use the trace to diagnose failures",
-        "text": "If the event is missing or wrong, inspect the tool inputs and responses. That can tell you whether the agent misread the request, used the wrong calendar, or ignored a conflict."
+        "title": "Make the handoff reviewable",
+        "text": "Have the investigator record the affected service, supporting observations, a proposed change, and how the operator would check recovery. Enforce any write permissions and approval checks at the tool boundary."
       },
       {
-        "title": "Turn a failed run into a repeatable check",
-        "text": "Save a scrubbed or synthetic example with the starting calendar and expected end state. Rerun it after changing instructions, tools, or the model. Track passing cases, latency, and cost so a fix has visible tradeoffs."
+        "title": "Agree on recovery signals",
+        "text": "Before a change, pick a trusted signal and time window. For checkout, the on-call engineer might watch completion rate and p95 latency against the pre-incident baseline. Rehearse on past incidents and measure useful findings and incorrect escalations."
       }
     ],
-    "sourceTitle": "Anthropic · Demystifying evals for AI agents",
-    "sourceUrl": "https://www.anthropic.com/research/demystifying-evals-for-ai-agents",
-    "readingTitle": "OpenAI Cookbook · Build an Agent Improvement Loop",
-    "readingUrl": "https://developers.openai.com/cookbook/examples/agents_sdk/agent_improvement_loop",
-    "readingSummary": "Demonstrates gathering feedback and failed traces, changing the agent harness, and rerunning evaluations against the revised candidate.",
+    "sourceTitle": "OpenAI Developers · Production monitoring with Codex",
+    "sourceUrl": "https://developers.openai.com/blog/production-monitoring-with-codex",
+    "readingTitle": "Google Cloud · Deploying agents safely in your enterprise",
+    "readingUrl": "https://cloud.google.com/blog/products/identity-security/deploying-agents-safely-in-your-enterprise",
+    "readingSummary": "Describes separate agent identities and infrastructure policy checks, including approval for sensitive operations. Its product controls are vendor-specific.",
     "sources": [
       {
-        "title": "Anthropic · Demystifying evals for AI agents",
-        "url": "https://www.anthropic.com/research/demystifying-evals-for-ai-agents",
-        "note": "Distinguishes the trace of a trial from what actually changed in the environment. Describes combining programmatic checks with human or model judgment."
+        "title": "OpenAI Developers · Production monitoring with Codex",
+        "url": "https://developers.openai.com/blog/production-monitoring-with-codex",
+        "note": "Shows a production triage workflow that starts with limited evidence access, presents findings to a human reviewer, and checks recovery after a change."
       },
       {
-        "title": "Anthropic · Harness design for long-running application development",
-        "url": "https://www.anthropic.com/research/harness-design-long-running-apps",
-        "note": "Reports a case study using structured handoffs and a separate evaluator to review generated work against explicit criteria."
-      },
-      {
-        "title": "OpenAI Cookbook · Build an Agent Improvement Loop",
-        "url": "https://developers.openai.com/cookbook/examples/agents_sdk/agent_improvement_loop",
-        "note": "Demonstrates gathering feedback and failed traces, changing the agent harness, and rerunning evaluations against the revised candidate."
+        "title": "Google Cloud · Deploying agents safely in your enterprise",
+        "url": "https://cloud.google.com/blog/products/identity-security/deploying-agents-safely-in-your-enterprise",
+        "note": "Describes separate agent identities and infrastructure policy checks, including approval for sensitive operations. Its product controls are vendor-specific."
       }
     ],
-    "reviewSummary": "This briefing turns general advice about evaluations and traces into a concrete test you can explain in an interview. The linked case studies show how their authors apply it. Results depend on the workflow and the quality of its checks.",
-    "updated": "2026-11-24",
-    "reviewed": "2026-11-24"
+    "reviewSummary": "The sources add a practical application of yesterday’s advice on inspecting agent actions and checking outcomes. In on-call work, scope evidence gathering separately, ask an operator to own the change decision, and define recovery before acting. The vendor examples describe workflows and controls. Their impact on incident outcomes depends on local evidence, permissions, and rehearsals.",
+    "reviewed": "2026-11-25",
+    "updated": "2026-11-25"
   },
-  "featuredSystemId": "content-delivery-network",
+  "featuredSystemId": "distributed-analytics-query",
   "trendHistory": [
+    {
+      "title": "Test what an agent actually changed",
+      "intro": "A useful agent evaluation checks two things. Did the task succeed in the system, and did the agent get there through an acceptable sequence of actions? Start with an outcome you can inspect, then use the trace to understand failures.",
+      "points": [
+        {
+          "title": "Verify the outcome directly",
+          "text": "For an agent that books a meeting, inspect the test calendar for one event with the right time and invitees. Also test a retry and check that it does not create a duplicate."
+        },
+        {
+          "title": "Use the trace to diagnose failures",
+          "text": "If the event is missing or wrong, inspect the tool inputs and responses. That can tell you whether the agent misread the request, used the wrong calendar, or ignored a conflict."
+        },
+        {
+          "title": "Turn a failed run into a repeatable check",
+          "text": "Save a scrubbed or synthetic example with the starting calendar and expected end state. Rerun it after changing instructions, tools, or the model. Track passing cases, latency, and cost so a fix has visible tradeoffs."
+        }
+      ],
+      "sourceTitle": "Anthropic · Demystifying evals for AI agents",
+      "sourceUrl": "https://www.anthropic.com/research/demystifying-evals-for-ai-agents",
+      "readingTitle": "OpenAI Cookbook · Build an Agent Improvement Loop",
+      "readingUrl": "https://developers.openai.com/cookbook/examples/agents_sdk/agent_improvement_loop",
+      "readingSummary": "Demonstrates gathering feedback and failed traces, changing the agent harness, and rerunning evaluations against the revised candidate.",
+      "sources": [
+        {
+          "title": "Anthropic · Demystifying evals for AI agents",
+          "url": "https://www.anthropic.com/research/demystifying-evals-for-ai-agents",
+          "note": "Distinguishes the trace of a trial from what actually changed in the environment. Describes combining programmatic checks with human or model judgment."
+        },
+        {
+          "title": "Anthropic · Harness design for long-running application development",
+          "url": "https://www.anthropic.com/research/harness-design-long-running-apps",
+          "note": "Reports a case study using structured handoffs and a separate evaluator to review generated work against explicit criteria."
+        },
+        {
+          "title": "OpenAI Cookbook · Build an Agent Improvement Loop",
+          "url": "https://developers.openai.com/cookbook/examples/agents_sdk/agent_improvement_loop",
+          "note": "Demonstrates gathering feedback and failed traces, changing the agent harness, and rerunning evaluations against the revised candidate."
+        }
+      ],
+      "reviewSummary": "This briefing turns general advice about evaluations and traces into a concrete test you can explain in an interview. The linked case studies show how their authors apply it. Results depend on the workflow and the quality of its checks.",
+      "updated": "2026-11-24",
+      "reviewed": "2026-11-24"
+    },
     {
       "title": "From copilots to agentic workflows",
       "intro": "Production agent engineering centers on measuring outcomes, tracing the full run, and keeping permissions and escalation paths clear.",

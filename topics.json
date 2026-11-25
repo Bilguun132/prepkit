@@ -706,12 +706,13 @@
     {
       "id": "binary-search",
       "title": "Binary search",
-      "subtitle": "Use an invariant to halve the search space.",
-      "summary": "On sorted or monotonic data, compare the midpoint with the target and discard the half that cannot contain the answer.",
+      "subtitle": "Use the order of a list to rule out about half the positions at each step.",
+      "summary": "Binary search checks the middle of a range of possible positions. In a sorted list, the middle value tells you which half can still contain the target. Repeat on the remaining range until you find the value or run out of positions.",
       "principles": [
-        "Define what the left and right boundaries mean.",
-        "Use a midpoint that guarantees progress.",
-        "After each comparison, keep the half where the answer can still exist."
+        "Before each check, the answer, if present, is still between left and right. This promise is called an invariant.",
+        "For an exact match, an inclusive range may contain one item when left equals right. Keep going until left is greater than right.",
+        "In a rotated list, first identify a part that is still sorted. Its endpoints tell you whether the target can be in that part.",
+        "In a minimum search, keep mid if it could itself be the answer. Every update must make the range smaller."
       ],
       "conceptFrames": {
         "items": [
@@ -727,15 +728,22 @@
             "left": 0,
             "right": 5,
             "pivot": 2,
-            "caption": "Check the middle value 3. The target 9 must be to its right.",
-            "state": "discard indices 0–2"
+            "caption": "Look for 9. The possible positions are 0 through 5. The midpoint is index 2, and its value is 3.",
+            "state": "3 < 9"
           },
           {
             "left": 3,
             "right": 5,
             "pivot": 4,
-            "caption": "The middle is 9. The target is found.",
-            "state": "target at index 4"
+            "caption": "Drop indices 0 through 2 because their values are all at most 3. The new midpoint is index 4.",
+            "state": "left = 3 · right = 5 · mid = 4"
+          },
+          {
+            "left": 3,
+            "right": 5,
+            "pivot": 4,
+            "caption": "The value at index 4 is 9. Return that position.",
+            "state": "answer = 4"
           }
         ]
       },
@@ -761,17 +769,36 @@
                 "left": 0,
                 "right": 5,
                 "pivot": 2,
-                "caption": "mid = 2, value 3. Since 3 < 9, discard the left half.",
-                "state": "search indices 3–5"
+                "caption": "Look for 9. The possible positions are 0 through 5. The midpoint is index 2, and its value is 3.",
+                "state": "3 < 9"
               },
               {
                 "left": 3,
                 "right": 5,
                 "pivot": 4,
-                "caption": "mid = 4, value 9. Match found.",
+                "caption": "Drop indices 0 through 2 because their values are all at most 3. The new midpoint is index 4.",
+                "state": "left = 3 · right = 5 · mid = 4"
+              },
+              {
+                "left": 3,
+                "right": 5,
+                "pivot": 4,
+                "caption": "The value at index 4 is 9. Return that position.",
                 "state": "answer = 4"
               }
             ]
+          },
+          "walkthrough": {
+            "input": "nums = [−1, 0, 3, 5, 9, 12], target = 9",
+            "output": "4, the index of 9",
+            "steps": [
+              "Start with left = 0 and right = 5. The middle index (0 + 5) // 2 is 2, and nums[2] is 3.",
+              "Because 3 < 9, drop index 2 and everything to its left. The next range is indices 3 through 5.",
+              "The new middle index is 4. Its value is 9, so return 4. If the range ever becomes empty instead, return −1."
+            ],
+            "whyItWorks": "Sorted order guarantees that a comparison rules out one side. Since you keep every position where the target could still be, a later check finds it if it exists.",
+            "cost": "O(log n) checks because each discards about half the remaining positions. O(1) extra space with a loop.",
+            "pitfall": "When the midpoint cannot match, move past it using mid + 1 or mid − 1. Leaving the same candidate range can make a loop run forever."
           }
         },
         {
@@ -796,24 +823,37 @@
                 "left": 0,
                 "right": 6,
                 "pivot": 3,
-                "caption": "mid = 3, value 7. The left half is sorted and target 0 is not in it.",
-                "state": "search right half"
+                "caption": "Look for 0. The middle value is 7. The left segment [4, 5, 6, 7] is sorted because it has no drop.",
+                "state": "0 is outside [4, 7] · left = 4"
               },
               {
                 "left": 4,
                 "right": 6,
                 "pivot": 5,
-                "caption": "mid = 5, value 1. The left half [0,1] is sorted; target 0 is there.",
-                "state": "search left half"
+                "caption": "The middle value is 1. The sorted left segment is now [0, 1]. The target 0 could be there, and mid has already failed.",
+                "state": "right = 4"
               },
               {
                 "left": 4,
                 "right": 4,
                 "pivot": 4,
-                "caption": "Value 0 is found at index 4.",
+                "caption": "One candidate remains at index 4. Its value is 0, so return the index.",
                 "state": "answer = 4"
               }
             ]
+          },
+          "walkthrough": {
+            "input": "nums = [4, 5, 6, 7, 0, 1, 2], target = 0",
+            "output": "4",
+            "steps": [
+              "Start at indices 0 and 6. The middle value 7 differs from the target. Since nums[left] ≤ nums[mid], the segment from 4 to 7 is sorted.",
+              "The target 0 falls outside 4 through 7, so discard that sorted side and set left = 4.",
+              "The next middle value is 1. The sorted left side is [0, 1]. The target is inside its value range, so keep the part before mid and set right = 4.",
+              "Check the one remaining position. Index 4 contains 0."
+            ],
+            "whyItWorks": "The rotated input with distinct values has at most one drop. If the left side is sorted, keep it only when nums[left] ≤ target < nums[mid]. Otherwise the right side is sorted and you can use nums[mid] < target ≤ nums[right] to decide whether to keep it. These strict midpoint comparisons apply after checking equality.",
+            "cost": "O(log n) time because each step keeps just one half. O(1) extra space.",
+            "pitfall": "Do not discard a half just because the midpoint is greater than the target. The drop in a rotated array can move smaller numbers to the right."
           }
         },
         {
@@ -838,27 +878,77 @@
                 "left": 0,
                 "right": 6,
                 "pivot": 3,
-                "caption": "Value 7 is greater than the right edge 2, so the minimum lies to the right.",
-                "state": "left = mid + 1"
+                "caption": "The middle value 7 is larger than the rightmost value 2. The drop to the minimum must be after index 3.",
+                "state": "left = 4"
               },
               {
                 "left": 4,
                 "right": 6,
                 "pivot": 5,
-                "caption": "Value 1 is less than right edge 2; keep the midpoint in the range.",
-                "state": "right = mid"
+                "caption": "The middle value 1 is smaller than the rightmost value 2. From mid to right the values increase, so the minimum can be at mid or to its left.",
+                "state": "right = 5 · keep mid"
+              },
+              {
+                "left": 4,
+                "right": 5,
+                "pivot": 4,
+                "caption": "The new midpoint is index 4. Value 0 is less than value 1 at the right edge, so keep index 4 and move right there.",
+                "state": "right = 4"
               },
               {
                 "left": 4,
                 "right": 4,
                 "pivot": 4,
-                "caption": "The boundaries meet at the minimum value 0.",
+                "caption": "The range has one element. Return the value at that index.",
                 "state": "minimum = 0"
               }
             ]
+          },
+          "walkthrough": {
+            "input": "nums = [4, 5, 6, 7, 0, 1, 2]",
+            "output": "0, the smallest value",
+            "steps": [
+              "Compare middle value 7 with the right edge 2. Since 7 > 2, the drop to the smallest element must be after mid. Move left to index 4.",
+              "In [0, 1, 2], compare midpoint 1 with rightmost 2. The minimum can be at mid or to its left, so set right = 5 and keep mid.",
+              "Now the range is [0, 1]. A comparison of 0 with 1 moves right to 4. The bounds meet and nums[4] is 0."
+            ],
+            "whyItWorks": "When nums[mid] > nums[right], the low part of the rotation is to the right of mid. When nums[mid] < nums[right], the right segment increases, so no position to the right of mid beats mid itself.",
+            "cost": "O(log n) time and O(1) extra space. Distinct values make each comparison decisive.",
+            "pitfall": "Use a loop that stops when left equals right. On the smaller-than branch set right = mid because the middle value could be the minimum."
           }
         }
-      ]
+      ],
+      "lesson": {
+        "intuition": "Imagine finding room 9 along a hallway where room numbers increase from left to right. If the middle room is 3, room 9 cannot be to its left. You can ignore that entire part of the hallway. The same idea works with a sorted Python list, where each check tells you which positions you can stop considering.",
+        "terms": [
+          {
+            "term": "Index",
+            "definition": "A position in the list. The first index is 0."
+          },
+          {
+            "term": "Search range",
+            "definition": "The positions still worth checking. In this lesson, left and right both belong to the range."
+          },
+          {
+            "term": "Midpoint",
+            "definition": "The middle index, computed as (left + right) // 2. Python’s // rounds down."
+          },
+          {
+            "term": "Rotated list",
+            "definition": "A sorted list cut once and rejoined with the back part first. For example, [0, 1, 2, 4] can become [2, 4, 0, 1]."
+          }
+        ],
+        "steps": [
+          "Set left to 0 and right to the last index. If left is greater than right, the range is empty.",
+          "Compute mid and compare nums[mid] to the target. If they are equal, return mid.",
+          "If the middle value is too small, every index up to mid is too small. Set left = mid + 1. If the middle value is too large, set right = mid − 1.",
+          "Repeat on the smaller range. If it becomes empty, return −1. Checking about half as many positions each time gives O(log n) time."
+        ],
+        "check": {
+          "question": "Search for 2 in [−1, 0, 3, 5, 9, 12]. After checking 3 at index 2, which positions remain? What should the search return?",
+          "answer": "Only indices 0 and 1 remain because 3 and everything after it are greater than 2. You next check −1 and then 0. Both are too small, so left advances past right and the result is −1."
+        }
+      }
     },
     {
       "id": "prefix-sums",
@@ -5360,5 +5450,5 @@
       }
     }
   ],
-  "featuredTopicId": "tree-dynamic-programming"
+  "featuredTopicId": "binary-search"
 }
