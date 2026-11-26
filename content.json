@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-11-25T08:06:00+08:00",
+  "lastUpdated": "2026-11-26T08:00:23+08:00",
   "systemSolutions": {
     "rate-limiter": {
       "intro": "A strong design makes the policy explicit, enforces it near the request path, and chooses a clear consistency tradeoff.",
@@ -1640,6 +1640,92 @@
           ]
         }
       ]
+    },
+    "experiment-analysis-platform": {
+      "intro": "Keep a durable record of assignments and outcomes, then compute each metric from the eligible cohort and a versioned analysis plan. Use streaming for monitoring and a reproducible batch pass for the final result.",
+      "sections": [
+        {
+          "title": "Requirements and capacity",
+          "body": "Start with user-level experiments and a binary conversion outcome per enrolled user. Set eligibility before randomization, freeze the randomization unit and allocation within a version, and agree on the enrollment period, outcome window, and lateness allowance. If assignments occur only when users reach a feature, treat that pre-variant event as the eligibility boundary. Keep observed exposures as diagnostics. Average ingest is 20,000 × 350 bytes, about 7 MB/s. At that steady rate, 30 days require about 18.1 TB of raw storage. Three copies would be roughly 54.4 TB before compression. Peak ingest of 35 MB/s informs queue partitions and worker capacity. Keep the raw retention period longer than the longest supported experiment, outcome window, and lateness combined, or snapshot immutable report inputs before they expire."
+        },
+        {
+          "title": "Interfaces and records",
+          "body": "POST /experiments creates an immutable experiment version with allocation, eligible population, primary metric, and analysis window. POST /events accepts batches with stable event IDs, authenticated source, user ID, event time, and event type. GET /experiments/{id}/results returns a report revision, counts by arm, data completeness, rates, and uncertainty. Store Assignment(experiment version, user, arm, enrolled_at), Exposure(experiment version, user, arm, shown_at), Outcome(event_id, user, event_time, type), and Report(experiment version, metric definition version, input snapshot IDs, cutoff, status). Keep identifiers pseudonymous and apply tenant permissions, retention, and deletion rules to raw events and derived views."
+        },
+        {
+          "title": "Ingest and attribute",
+          "body": "A stable hash of experiment ID, version, and user ID assigns a variant under the frozen allocation. Write the enrollment record through a reliable event path before applying the variant and require that retries reuse the same assignment key. Ingest accepts events once durably buffered, then stores raw events in object storage for replay. Partition the join by experiment version and user. Keep one enrollment per user, deduplicate event IDs, and wait for late assignments or outcomes within a known event-time allowance. Join outcomes inside each user’s observation window. For conversion, reduce each user to a yes/no result. Count all enrolled users in the denominator so deciding whether someone was exposed after assignment cannot selectively filter out a treatment group."
+        },
+        {
+          "title": "Check and publish",
+          "body": "Use streaming materialized views for provisional counts and show their data freshness and completeness. Compare observed assignment proportions with expected allocation using a sample ratio mismatch check. Treat a failing check as a data quality signal and withhold a recommendation while checking eligibility, enrollment delivery, and event loss by arm. Separately compare exposure and outcome delivery rates, since a matching assignment ratio cannot prove later telemetry is healthy. At the preset cutoff, recompute from deduplicated raw snapshots after waiting for the outcome and lateness windows. Publish an immutable report revision with rates, treatment-control difference, and a confidence interval. Apply inference at the randomization unit. If a correction is needed later, publish a new revision with the reason, preserving the old one."
+        },
+        {
+          "title": "Failures and tradeoffs",
+          "body": "Checkpoint stream progress and let replay rebuild provisional views after worker loss. Key aggregates and report writes by version so retries replace or reconcile the same logical work. Quarantine malformed records and alert when lag or missing data exceeds budget. A 15-minute view helps spot instrumentation bugs and guardrail regressions. Use the planned analysis cutoff for ordinary fixed-horizon inference, or use a method designed for repeated looks if early decisions are required. Separate exploratory segments and additional metrics from the predeclared primary result. Batch reconciliation costs extra compute but makes reports reproducible. Handling all enrolled users can dilute effects when few see the change, but filtering by observed exposure after randomization can bias the comparison."
+        }
+      ],
+      "board": [
+        {
+          "title": "Enroll and collect events",
+          "steps": [
+            {
+              "name": "Experiment registry",
+              "detail": "Freezes eligibility, arm weights, metric, and window."
+            },
+            {
+              "name": "Product client and assignment service",
+              "detail": "Assign a stable arm at eligibility and record enrollment."
+            },
+            {
+              "name": "Event gateway",
+              "detail": "Accepts enrollment, exposure, and outcome events."
+            },
+            {
+              "name": "Durable stream and raw store",
+              "detail": "Buffer ingestion and retain events for replay."
+            }
+          ]
+        },
+        {
+          "title": "Show provisional results",
+          "steps": [
+            {
+              "name": "Stream join",
+              "detail": "Deduplicates events and attributes outcomes within each user’s window."
+            },
+            {
+              "name": "Metric aggregator",
+              "detail": "Counts enrolled and converted users by arm."
+            },
+            {
+              "name": "Data quality checks",
+              "detail": "Flag unexpected assignment ratios and missing data."
+            },
+            {
+              "name": "Dashboard",
+              "detail": "Shows provisional rates with freshness and quality flags."
+            }
+          ]
+        },
+        {
+          "title": "Publish a final report",
+          "steps": [
+            {
+              "name": "Finalization scheduler",
+              "detail": "Waits for the planned outcome and lateness windows."
+            },
+            {
+              "name": "Batch recompute",
+              "detail": "Reconciles deduplicated raw snapshots under frozen definitions."
+            },
+            {
+              "name": "Results store",
+              "detail": "Publishes an immutable report revision with uncertainty."
+            }
+          ]
+        }
+      ]
     }
   },
   "systems": [
@@ -2039,6 +2125,21 @@
         "Discuss partition pruning, join choice, hot keys, memory spill, worker or coordinator failure, and authorization when reading saved results.",
         "Compare skipping queues to favor latency versus enforcing resource limits, and transient data exchange versus durable exchange for retries."
       ]
+    },
+    {
+      "id": "experiment-analysis-platform",
+      "title": "Design an A/B experiment analysis platform",
+      "topic": "Online experiments and trustworthy metrics",
+      "tag": "Stable cohorts and repeatable readouts",
+      "scenario": "Build an internal platform that reports whether product experiments changed conversion. Clients already have a feature delivery system. Your platform must record which randomized users were assigned and exposed, join outcome events to the correct cohort, show provisional results within 15 minutes, and publish a reproducible final report after a preset analysis window. Expect 20,000 events per second on average, a peak of 100,000 per second, 350 bytes per event, and 30 days of raw replay. Retried, late, or missing events must not silently bias the results.",
+      "guide": [
+        "Clarify the randomization unit, what counts as enrollment and exposure, the outcome window, and what interim monitoring may conclude.",
+        "At 20,000 events/s and 350 bytes/event, budget about 7 MB/s on average and 35 MB/s at peak. Thirty days of raw replay is about 18 TB before replication or compression.",
+        "Define experiment creation, batch event ingestion, status, and report reads. Identify the experiment version, assignment record, exposure record, metric event, and report revision.",
+        "Draw ingest, durable events, per-user attribution, metric aggregation, data quality checks, and the results store. Keep assignment and exposure counts visible separately.",
+        "Explain duplicate handling, out-of-order joins, uneven loss across variants, configuration changes, and late data after finalization.",
+        "Discuss provisional streaming versus exact batch reconciliation, confidence intervals, and safe handling of repeated looks at the data."
+      ]
     }
   ],
   "trend": {
@@ -2073,13 +2174,18 @@
         "title": "Google Cloud · Deploying agents safely in your enterprise",
         "url": "https://cloud.google.com/blog/products/identity-security/deploying-agents-safely-in-your-enterprise",
         "note": "Describes separate agent identities and infrastructure policy checks, including approval for sensitive operations. Its product controls are vendor-specific."
+      },
+      {
+        "title": "Google Cloud · Five must-have guides to move agents into production",
+        "url": "https://cloud.google.com/blog/topics/developers-practitioners/five-guides-to-building-and-scaling-production-ready-ai-agents",
+        "note": "The governance and delegated approval examples provide additional context for separating investigation access from change approval."
       }
     ],
-    "reviewSummary": "The sources add a practical application of yesterday’s advice on inspecting agent actions and checking outcomes. In on-call work, scope evidence gathering separately, ask an operator to own the change decision, and define recovery before acting. The vendor examples describe workflows and controls. Their impact on incident outcomes depends on local evidence, permissions, and rehearsals.",
-    "reviewed": "2026-11-25",
+    "reviewSummary": "Rechecked the production monitoring case study and Google Cloud’s guidance on delegated approvals and agent governance, and looked for developments since 25 Nov. The material reviewed supports scoped evidence access, an operator-owned change decision, and explicit recovery checks. The current recommendation still applies.",
+    "reviewed": "2026-11-26",
     "updated": "2026-11-25"
   },
-  "featuredSystemId": "distributed-analytics-query",
+  "featuredSystemId": "experiment-analysis-platform",
   "trendHistory": [
     {
       "title": "Test what an agent actually changed",

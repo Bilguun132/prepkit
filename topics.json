@@ -953,12 +953,13 @@
     {
       "id": "prefix-sums",
       "title": "Prefix sums",
-      "subtitle": "Answer range questions from accumulated totals.",
-      "summary": "Store the running total so a range sum can be found by subtracting two prefixes.",
+      "subtitle": "Save running totals so you can find the sum between two positions.",
+      "summary": "A prefix total tells you how much you have added before a boundary in a list. Save one total per boundary, then subtract the total before the range from the total after it. The same idea helps count ranges with a target sum.",
       "principles": [
-        "Define prefix[i] as the sum before index i.",
-        "A range sum [l, r] is prefix[r + 1] − prefix[l].",
-        "For target-sum subarrays, count earlier prefixes equal to current − target."
+        "Use n + 1 boundaries for n numbers. Start with prefix[0] = 0 so ranges beginning at index 0 work too.",
+        "With prefix[i] defined as the total before index i, the sum from left through right is prefix[right + 1] − prefix[left].",
+        "To count ranges summing to k, look for earlier prefix totals equal to current total − k. Store their counts, including duplicates.",
+        "Two running products can cover everything except the current item. Multiplying both sides works even when the input contains zeros."
       ],
       "conceptFrames": {
         "items": [
@@ -969,19 +970,17 @@
         ],
         "frames": [
           {
-            "active": [
-              0
-            ],
-            "caption": "Observe the current state: 0.",
-            "state": 0
+            "active": [],
+            "caption": "Boundary 0 comes before the first number. No items have been added, so store 0.",
+            "state": "prefix = [0]"
           },
           {
             "active": [
               0,
               1
             ],
-            "caption": "Apply the pattern and update the stored state: 3.",
-            "state": 3
+            "caption": "Add 3 and save that total. Then add 1 and save 4.",
+            "state": "prefix = [0, 3, 4]"
           },
           {
             "active": [
@@ -990,49 +989,160 @@
               2,
               3
             ],
-            "caption": "The invariant leads to the result: 8.",
-            "state": 8
+            "caption": "Add 4 and then 2. Each entry records a total at a different boundary.",
+            "state": "prefix = [0, 3, 4, 8, 10]"
+          },
+          {
+            "active": [
+              1,
+              2,
+              3
+            ],
+            "caption": "For indices 1 through 3, start with the total after index 3 and remove the total before index 1.",
+            "state": "prefix[4] − prefix[1] = 10 − 3 = 7"
           }
         ]
       },
       "questions": [
+        {
+          "title": "Range Sum Query — Immutable",
+          "difficulty": "Easy",
+          "number": 303,
+          "url": "https://leetcode.com/problems/range-sum-query-immutable/",
+          "prompt": "Compute many inclusive range sums for an array whose values stay fixed.",
+          "why": "Precompute prefix totals once, then answer each query with one subtraction.",
+          "visual": {
+            "items": [
+              2,
+              -3,
+              5,
+              1
+            ],
+            "frames": [
+              {
+                "active": [],
+                "caption": "Initialize the total before the first item to 0.",
+                "state": "prefix = [0]"
+              },
+              {
+                "active": [
+                  0,
+                  1
+                ],
+                "caption": "Store the total after 2, then add −3. A running total can go down.",
+                "state": "prefix = [0, 2, −1]"
+              },
+              {
+                "active": [
+                  0,
+                  1,
+                  2,
+                  3
+                ],
+                "caption": "Continue with 5 and 1. Keep the completed array for every query.",
+                "state": "prefix = [0, 2, −1, 4, 5]"
+              },
+              {
+                "active": [
+                  1,
+                  2
+                ],
+                "caption": "Query indices 1 through 2. Remove the total before index 1 from the total after index 2.",
+                "state": "prefix[3] − prefix[1] = 4 − 2 = 2"
+              },
+              {
+                "active": [
+                  0,
+                  1,
+                  2,
+                  3
+                ],
+                "caption": "A second query can reuse the same array without scanning the numbers again.",
+                "state": "sumRange(0, 3) = prefix[4] − prefix[0] = 5"
+              }
+            ]
+          },
+          "walkthrough": {
+            "input": "nums = [2, −3, 5, 1]; queries [1, 2] and [0, 3]",
+            "output": "2 and 5",
+            "steps": [
+              "Start at zero and add each value. Save prefix = [0, 2, −1, 4, 5].",
+              "For [1, 2], take prefix[3] = 4. Subtract prefix[1] = 2 to remove the first item. The result is 2.",
+              "For [0, 3], subtract the empty total prefix[0] from prefix[4]. The result is 5."
+            ],
+            "whyItWorks": "The larger prefix includes the range plus everything before it. The subtraction cancels the shared earlier items, even when some are negative.",
+            "cost": "O(n) setup time and O(n) space to store the totals. Each query takes O(1) time.",
+            "pitfall": "Use right + 1 for the end boundary. On a one-item range [i, i], using prefix[i] twice would return zero."
+          }
+        },
         {
           "title": "Subarray Sum Equals K",
           "difficulty": "Medium",
           "number": 560,
           "url": "https://leetcode.com/problems/subarray-sum-equals-k/",
           "prompt": "Count contiguous ranges whose sum is k.",
-          "why": "For each running sum s, earlier prefixes equal to s − k complete a valid range.",
+          "why": "The sum from an earlier boundary to the current boundary is the difference of their prefix totals. Count how many earlier boundaries have the required total, then record the current boundary.",
           "visual": {
             "items": [
-              3,
               1,
-              4,
-              2
+              -1,
+              2,
+              0
             ],
             "frames": [
+              {
+                "active": [],
+                "caption": "Target k is 2. Before any numbers, there is one boundary with total 0.",
+                "state": "seen = {0: 1} · answer = 0"
+              },
               {
                 "active": [
                   0
                 ],
-                "caption": "Identify the state relevant to Subarray Sum Equals K.",
-                "state": 0
+                "caption": "Add 1. No earlier boundary has total 1 − 2 = −1. Record total 1.",
+                "state": "seen = {0: 1, 1: 1}"
               },
               {
                 "active": [
+                  0,
                   1
                 ],
-                "caption": "For each running sum s, earlier prefixes equal to s − k complete a valid range.",
-                "state": 3
+                "caption": "Add −1. The total returns to 0. Record a second boundary with total 0.",
+                "state": "seen = {0: 2, 1: 1}"
               },
               {
                 "active": [
+                  0,
+                  1,
                   2
                 ],
-                "caption": "Apply the same invariant to complete Subarray Sum Equals K.",
-                "state": 8
+                "caption": "Add 2. Two earlier boundaries have total 0, so two ranges ending here have sum 2.",
+                "state": "ranges [0, 2] and [2, 2] · answer = 2"
+              },
+              {
+                "active": [
+                  0,
+                  1,
+                  2,
+                  3
+                ],
+                "caption": "Add 0. The same two starting boundaries make two more ranges with this new ending position.",
+                "state": "ranges [0, 3] and [2, 3] · answer = 4"
               }
             ]
+          },
+          "walkthrough": {
+            "input": "nums = [1, −1, 2, 0], k = 2",
+            "output": "4 nonempty ranges",
+            "steps": [
+              "Begin with seen = {0: 1}. That 0 marks the boundary before the list.",
+              "Reading 1 and −1 gives running totals of 1 and 0. Both lookups find no match yet. There are now two recorded boundaries with total 0.",
+              "Reading 2 brings the total to 2. Add seen[2 − 2] = 2 to the answer, then record total 2.",
+              "Reading 0 leaves the total at 2. The same two starting boundaries pair with this new ending position, giving four ranges in total."
+            ],
+            "whyItWorks": "A range with total k ends at a prefix total that is exactly k more than its starting prefix. Each occurrence of that starting total gives a different range. Negative numbers can make running totals fall, so the count does not rely on sorted totals.",
+            "cost": "O(n) expected time with a dictionary and O(n) extra space. There are at most n + 1 distinct prefix totals.",
+            "pitfall": "Look up the needed total before recording the current one. With k = 0, recording it first would count an empty range."
           }
         },
         {
@@ -1040,80 +1150,101 @@
           "difficulty": "Medium",
           "number": 238,
           "url": "https://leetcode.com/problems/product-of-array-except-self/",
-          "prompt": "Build each position’s product without division.",
-          "why": "A prefix product and a suffix product give the answer while using constant extra space.",
+          "prompt": "For each index, multiply all the other numbers in linear time without division.",
+          "why": "The numbers before and after an index form two disjoint parts. Multiply their products to get the answer for that index.",
           "visual": {
             "items": [
+              2,
+              0,
               3,
-              1,
-              4,
-              2
+              -1
             ],
             "frames": [
               {
                 "active": [
-                  0
+                  0,
+                  1,
+                  2,
+                  3
                 ],
-                "caption": "Identify the state relevant to Product of Array Except Self.",
-                "state": 0
+                "caption": "Sweep left to right and save the product of values before each index. Once you pass the zero, that running product stays zero.",
+                "state": "left products stored in output = [1, 2, 0, 0]"
               },
               {
                 "active": [
-                  1
+                  3
                 ],
-                "caption": "A prefix product and a suffix product give the answer while using constant extra space.",
-                "state": 3
+                "caption": "Start the right-to-left sweep with right product 1. Multiply output[3] by 1, then include −1 in the right product.",
+                "state": "output = [1, 2, 0, 0] · right = −1"
               },
               {
                 "active": [
                   2
                 ],
-                "caption": "Apply the same invariant to complete Product of Array Except Self.",
-                "state": 8
-              }
-            ]
-          }
-        },
-        {
-          "title": "Range Sum Query — Immutable",
-          "difficulty": "Easy",
-          "number": 303,
-          "url": "https://leetcode.com/problems/range-sum-query-immutable/",
-          "prompt": "Answer repeated range-sum queries quickly.",
-          "why": "Precompute prefix totals once, then answer each query with one subtraction.",
-          "visual": {
-            "items": [
-              3,
-              1,
-              4,
-              2
-            ],
-            "frames": [
-              {
-                "active": [
-                  0
-                ],
-                "caption": "Identify the state relevant to Range Sum Query — Immutable.",
-                "state": 0
+                "caption": "At index 2, multiply the stored 0 by −1. Then include 3 for the next position.",
+                "state": "output = [1, 2, 0, 0] · right = −3"
               },
               {
                 "active": [
                   1
                 ],
-                "caption": "Precompute prefix totals once, then answer each query with one subtraction.",
-                "state": 3
+                "caption": "At the zero, multiply the saved left product 2 by the right product −3 before including the zero.",
+                "state": "output = [1, −6, 0, 0] · right = 0"
               },
               {
                 "active": [
-                  2
+                  0
                 ],
-                "caption": "Apply the same invariant to complete Range Sum Query — Immutable.",
-                "state": 8
+                "caption": "At index 0, the right side includes the zero. Multiply its saved left product 1 by 0.",
+                "state": "answer = [0, −6, 0, 0]"
               }
             ]
+          },
+          "walkthrough": {
+            "input": "nums = [2, 0, 3, −1]",
+            "output": "[0, −6, 0, 0]",
+            "steps": [
+              "Save each left product in the output before multiplying the running total by the current value. Start with 1, so the saved products are [1, 2, 0, 0].",
+              "Go right to left with right product starting at 1. At each index multiply the saved left product by the right product, then include this index’s value in the right product.",
+              "At index 1, the left product is 2 and the right product is 3 × −1 = −3. That position gives −6. Every other output includes the zero."
+            ],
+            "whyItWorks": "Each position combines all numbers strictly before and strictly after it. The two sides contain every required value exactly once. An empty side has product 1, which leaves the other side unchanged.",
+            "cost": "O(n) time for two passes and O(1) extra space apart from the required output array.",
+            "pitfall": "Update the running product after using it for the current index. Updating it first includes the value you need to skip."
           }
         }
-      ]
+      ],
+      "lesson": {
+        "intuition": "Imagine a receipt that shows a running total after each purchase. To find what you spent on the last few items, subtract the total printed just before those items from the final total. A prefix sum works the same way for a list of numbers, including negative numbers.",
+        "terms": [
+          {
+            "term": "Prefix",
+            "definition": "The first part of the list, starting at index 0. The empty prefix contains no items."
+          },
+          {
+            "term": "Boundary",
+            "definition": "A position between numbers. Boundary i is just before index i, so prefix[i] contains the first i numbers."
+          },
+          {
+            "term": "Inclusive range",
+            "definition": "A part of the list that includes both endpoint indices. The range [1, 3] contains indices 1, 2, and 3."
+          },
+          {
+            "term": "Suffix",
+            "definition": "The last part of the list. In the product example, the right-hand suffix starts just after the index you are skipping."
+          }
+        ],
+        "steps": [
+          "Make an array of running totals. Start with 0 before the first item.",
+          "For each number, add it to the previous total and save the new total. For [3, 1, 4, 2], this gives [0, 3, 4, 8, 10].",
+          "To find the sum at indices 1 through 3, take prefix[4] = 10. It includes every item up to and including index 3.",
+          "Subtract prefix[1] = 3 to remove the item before the range. The answer is 7."
+        ],
+        "check": {
+          "question": "With [3, 1, 4, 2], which two prefix entries give the sum at index 2 alone?",
+          "answer": "Use prefix[3] = 8 and prefix[2] = 4. The subtraction 8 − 4 leaves just the number at index 2, which is 4."
+        }
+      }
     },
     {
       "id": "stack",
@@ -5450,5 +5581,5 @@
       }
     }
   ],
-  "featuredTopicId": "binary-search"
+  "featuredTopicId": "prefix-sums"
 }
