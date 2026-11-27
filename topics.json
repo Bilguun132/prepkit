@@ -1249,49 +1249,51 @@
     {
       "id": "stack",
       "title": "Stacks",
-      "subtitle": "Use last-in, first-out state to match, undo, or wait.",
-      "summary": "A stack keeps the most recent unresolved item accessible. Pop it when the current item resolves it.",
+      "subtitle": "Keep the newest unfinished item at the top.",
+      "summary": "A stack is a list you add to and remove from at only one end. It helps when the most recent unfinished item should be resolved first, such as the opening bracket of an expression inside another expression.",
       "principles": [
-        "Push unresolved items with the information needed later.",
-        "Pop only when the current item satisfies the stack condition.",
-        "Each item should enter and leave at most once."
+        "In Python, use append() to push, pop() to remove the top, and stack[-1] to peek when the stack is nonempty.",
+        "Decide what each entry remembers. A bracket problem needs a character. A waiting-time problem needs an index.",
+        "Use a plain stack when nesting determines the order. Use a monotonic stack when a value comparison determines which pending items can be resolved.",
+        "When each input position enters the stack once and leaves at most once, all pushes and pops together take linear time."
       ],
       "conceptFrames": {
         "items": [
           "(",
-          ")",
           "[",
           "]",
-          "{",
-          "}"
+          ")"
         ],
         "frames": [
           {
             "active": [
               0
             ],
-            "caption": "Observe the current state: (.",
-            "state": "("
+            "caption": "Read (. It needs a matching close, so push it onto the empty stack.",
+            "state": "bottom → top: ['(']"
           },
           {
             "active": [
-              0,
               1
             ],
-            "caption": "Apply the pattern and update the stored state: ✓.",
-            "state": "✓"
+            "caption": "Read [. It opens inside the first pair. Push it on top of (.",
+            "state": "bottom → top: ['(', '[']"
+          },
+          {
+            "active": [
+              1,
+              2
+            ],
+            "caption": "Read ]. It matches the newest opening bracket [, so pop only that entry.",
+            "state": "bottom → top: ['(']"
           },
           {
             "active": [
               0,
-              1,
-              2,
-              3,
-              4,
-              5
+              3
             ],
-            "caption": "The invariant leads to the result: ✓.",
-            "state": "✓"
+            "caption": "Read ). It matches the last remaining opener. Pop it. The input is finished and the stack is empty.",
+            "state": "stack = [] · valid"
           }
         ]
       },
@@ -1306,35 +1308,54 @@
           "visual": {
             "items": [
               "(",
-              ")",
               "[",
               "]",
-              "{",
-              "}"
+              ")"
             ],
             "frames": [
               {
                 "active": [
                   0
                 ],
-                "caption": "Identify the state relevant to Valid Parentheses.",
-                "state": "("
+                "caption": "Read (. It needs a matching close, so push it onto the empty stack.",
+                "state": "bottom → top: ['(']"
               },
               {
                 "active": [
                   1
                 ],
-                "caption": "The newest unmatched opening bracket must be the next one closed.",
-                "state": "✓"
+                "caption": "Read [. It opens inside the first pair. Push it on top of (.",
+                "state": "bottom → top: ['(', '[']"
               },
               {
                 "active": [
+                  1,
                   2
                 ],
-                "caption": "Apply the same invariant to complete Valid Parentheses.",
-                "state": "✓"
+                "caption": "Read ]. It matches the newest opening bracket [, so pop only that entry.",
+                "state": "bottom → top: ['(']"
+              },
+              {
+                "active": [
+                  0,
+                  3
+                ],
+                "caption": "Read ). It matches the last remaining opener. Pop it. The input is finished and the stack is empty.",
+                "state": "stack = [] · valid"
               }
             ]
+          },
+          "walkthrough": {
+            "input": "s = \"([])\"",
+            "output": "true",
+            "steps": [
+              "Push ( at index 0. Push [ at index 1 on top of it.",
+              "At index 2, ] matches [. Pop [ and leave ( on the stack.",
+              "At index 3, ) matches (. Pop it. The empty stack confirms all openings closed in order."
+            ],
+            "whyItWorks": "At each step the stack lists the opening brackets that still need a close. A pair inside another pair has to close first, which is exactly the order a stack gives.",
+            "cost": "O(n) time because each character is read once. Up to O(n) extra space for unmatched openings.",
+            "pitfall": "Equal counts of openings and closings do not guarantee correct nesting. Check the top’s type and handle an empty stack before popping."
           }
         },
         {
@@ -1346,36 +1367,70 @@
           "why": "Store the minimum-so-far alongside each stack state.",
           "visual": {
             "items": [
-              "(",
-              ")",
-              "[",
-              "]",
-              "{",
-              "}"
+              "push 4",
+              "push 2",
+              "push 2",
+              "pop",
+              "pop",
+              "getMin"
             ],
             "frames": [
               {
                 "active": [
                   0
                 ],
-                "caption": "Identify the state relevant to Min Stack.",
-                "state": "("
+                "caption": "The first entry stores both value 4 and current minimum 4.",
+                "state": "[(4, 4)]"
               },
               {
                 "active": [
                   1
                 ],
-                "caption": "Store the minimum-so-far alongside each stack state.",
-                "state": "✓"
+                "caption": "Push 2 and save min(2, 4) as the new minimum.",
+                "state": "[(4, 4), (2, 2)]"
               },
               {
                 "active": [
                   2
                 ],
-                "caption": "Apply the same invariant to complete Min Stack.",
-                "state": "✓"
+                "caption": "Push another 2. Give it its own entry even though the minimum is unchanged.",
+                "state": "[(4, 4), (2, 2), (2, 2)]"
+              },
+              {
+                "active": [
+                  3
+                ],
+                "caption": "Pop the newest pair. The other 2 still keeps the minimum at 2.",
+                "state": "[(4, 4), (2, 2)]"
+              },
+              {
+                "active": [
+                  4
+                ],
+                "caption": "Pop again. The surviving top already remembers the previous minimum.",
+                "state": "[(4, 4)]"
+              },
+              {
+                "active": [
+                  5
+                ],
+                "caption": "Read the saved minimum from the top pair.",
+                "state": "getMin() = 4"
               }
             ]
+          },
+          "walkthrough": {
+            "input": "push(4), push(2), push(2), pop(), pop(), getMin()",
+            "output": "getMin() returns 4",
+            "steps": [
+              "Store (value, minimum so far) at every depth. The first push stores (4, 4).",
+              "Each push of 2 stores (2, 2). The earlier pairs stay as they were.",
+              "After the first pop the top is still (2, 2). After the second it is (4, 4).",
+              "Return the second number of the top pair from getMin(). Return the first from top()."
+            ],
+            "whyItWorks": "Each pair summarizes the stack exactly as it was when that item became the top. Popping restores a previous depth with its minimum already saved.",
+            "cost": "O(1) stack operations in the usual interview model. Python list append is amortized O(1) because it occasionally grows the list. O(n) space for n stored items.",
+            "pitfall": "A single global minimum cannot recover after its last occurrence is removed. Save the previous minimum at each depth, including duplicate minima."
           }
         },
         {
@@ -1384,42 +1439,98 @@
           "number": 739,
           "url": "https://leetcode.com/problems/daily-temperatures/",
           "prompt": "Find how many days until a warmer temperature.",
-          "why": "A monotonic decreasing stack stores days still waiting for a warmer value.",
+          "why": "Keep indices whose first strictly warmer day is still unknown. A new temperature answers every smaller temperature you can pop from the top. Equal values stay pending.",
           "visual": {
             "items": [
-              "(",
-              ")",
-              "[",
-              "]",
-              "{",
-              "}"
+              73,
+              71,
+              71,
+              74,
+              72
             ],
             "frames": [
               {
                 "active": [
-                  0
-                ],
-                "caption": "Identify the state relevant to Daily Temperatures.",
-                "state": "("
-              },
-              {
-                "active": [
+                  0,
                   1
                 ],
-                "caption": "A monotonic decreasing stack stores days still waiting for a warmer value.",
-                "state": "✓"
+                "caption": "Day 1 is cooler than day 0. Both wait for a future warmer day.",
+                "state": "stack indices = [0, 1]"
               },
               {
                 "active": [
+                  1,
                   2
                 ],
-                "caption": "Apply the same invariant to complete Daily Temperatures.",
-                "state": "✓"
+                "caption": "Day 2 equals day 1. It cannot resolve day 1, so push the new index too.",
+                "state": "stack indices = [0, 1, 2]"
+              },
+              {
+                "active": [
+                  0,
+                  1,
+                  2,
+                  3
+                ],
+                "caption": "Day 3 has temperature 74. Pop 2, 1, then 0 and store the distances from each to day 3.",
+                "state": "answer = [3, 2, 1, 0, 0] · stack = [3]"
+              },
+              {
+                "active": [
+                  3,
+                  4
+                ],
+                "caption": "Day 4 is cooler than day 3. Neither of those last two indices sees a warmer day.",
+                "state": "stack = [3, 4] · final answer = [3, 2, 1, 0, 0]"
               }
             ]
+          },
+          "walkthrough": {
+            "input": "temperatures = [73, 71, 71, 74, 72]",
+            "output": "[3, 2, 1, 0, 0]",
+            "steps": [
+              "Initialize all waits to zero. Store the indices of days 0 and 1 because day 1 does not resolve day 0.",
+              "Keep day 1 pending when day 2 is equal. The stack now holds indices 0, 1, 2 with temperatures 73, 71, 71.",
+              "At day 3, pop pending days 2, 1, and 0. Write waits of 1, 2, and 3 days at their respective positions. Push day 3.",
+              "Day 4 is cooler, so add it to the stack. At the end, unresolved positions keep their zero waits."
+            ],
+            "whyItWorks": "Pending temperatures from bottom to top never increase. If the newest day is warmer than the top, it is the first warmer day that unresolved index has encountered. If the top is too warm, everything below it is at least as warm and can wait.",
+            "cost": "O(n) time because there is one push and at most one pop per index. O(n) extra space if many days are still waiting.",
+            "pitfall": "Use a strict greater-than check and store indices for day differences. Equal temperatures do not resolve each other."
           }
         }
-      ]
+      ],
+      "lesson": {
+        "intuition": "Think of a pile of plates. You put a plate on top and take the top plate off first. A stack works the same way. While reading brackets, each opening bracket goes on the stack. The next closing bracket has to match the opening bracket on top, because the innermost pair must close first.",
+        "terms": [
+          {
+            "term": "Top",
+            "definition": "The newest item still on the stack. In a Python list it is the last element."
+          },
+          {
+            "term": "Push",
+            "definition": "Add a new item to the top."
+          },
+          {
+            "term": "Pop",
+            "definition": "Remove and return the top item."
+          },
+          {
+            "term": "Last in, first out",
+            "definition": "The item added most recently is the first one you can remove."
+          }
+        ],
+        "steps": [
+          "Start with an empty stack and read one character at a time.",
+          "When you read an opening bracket, push it onto the stack.",
+          "When you read a closing bracket, check the top. If the stack is empty or the bracket types differ, the string is invalid. Pop the top after a match.",
+          "After the last character, check that the stack is empty. Any item left on it still needs a closing bracket."
+        ],
+        "check": {
+          "question": "Is ([)] valid? Which character makes the decision?",
+          "answer": "It is invalid at ). The top opening bracket is [, so the next close must be ]. The earlier ( cannot close while [ is still open."
+        }
+      }
     },
     {
       "id": "linked-lists",
@@ -5581,5 +5692,5 @@
       }
     }
   ],
-  "featuredTopicId": "prefix-sums"
+  "featuredTopicId": "stack"
 }

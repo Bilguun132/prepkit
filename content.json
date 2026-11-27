@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-11-26T08:00:23+08:00",
+  "lastUpdated": "2026-11-27T08:07:12+08:00",
   "systemSolutions": {
     "rate-limiter": {
       "intro": "A strong design makes the policy explicit, enforces it near the request path, and chooses a clear consistency tradeoff.",
@@ -1726,6 +1726,92 @@
           ]
         }
       ]
+    },
+    "nearby-place-search": {
+      "intro": "Use a searchable view of versioned place listings. Route each query to the geographic shards that could hold a match, then filter candidates by actual distance before ranking them.",
+      "sections": [
+        {
+          "title": "Requirements and scale",
+          "body": "Support text, category, straight-line radius, and an optional open-now filter. Use a conservative rectangle or other complete region cover for routing, then check a documented earth-distance model. Keep travel-time routing outside this version. At 100 million listings and about 1 KB of indexed fields each, the raw documents contribute about 100 GB before spatial indexes, text postings, and replicas. Four shard queries per search on average produces 200,000 shard requests/s at peak. Measure the distribution of fan-out and candidate counts, especially downtown, since the average does not size the busiest partition."
+        },
+        {
+          "title": "API and records",
+          "body": "GET /places/search accepts latitude, longitude, radiusMeters, optional query, category and openNow, and an opaque cursor. Return listing IDs, summaries, distance and an explicit partial-results flag if coverage is incomplete. GET /places/{id} reads the current source record. PUT /places/{id} with an expected version lets authorized owners update listings, including a coordinate move or closure. Store id, coordinates, names and categories, timezone, weekly hours and exceptions, status, and version. Evaluate open-now at a captured query timestamp using the listing timezone, including holiday and overnight rules."
+        },
+        {
+          "title": "Writes and index consistency",
+          "body": "Store the listing and an outbox record in the same transaction. Publish the change to an indexing queue. The projector applies updates and tombstones with a version fence so delayed events cannot resurrect a closed or outdated listing. If coordinates move across shards, write the new version and a tombstone to the old shard, then reconcile until both are visible. During the transition, deduplicate returned IDs and validate the displayed candidate version against authoritative metadata before returning changes that affect eligibility. Measure source-to-index lag and replay the outbox after failure. Search can still temporarily omit a moved listing until the new projection appears."
+        },
+        {
+          "title": "Read, rank, and page",
+          "body": "Cover the requested circle with a conservative set of routing cells or intersecting shard regions. Handle longitude wraparound when a cover crosses the antimeridian and avoid dropping edge cells based on their centers. Each shard combines a spatial index and text postings to get candidates, then applies exact distance, availability, and category checks. Rank with a common scoring function that combines text fit, distance and a quality signal. The coordinator merges shard top lists, applies deterministic ID tie-breaks, and refills when deduplication or validation drops candidates. When strict paging is required, use a short-lived per-shard snapshot and bind the cursor to it, with the query radius, score definition, and evaluation timestamp."
+        },
+        {
+          "title": "Load, failure, and tradeoffs",
+          "body": "Replicate popular areas, split dense shards, set query deadlines, and enforce radius and page limits. A failed required shard can be retried on a replica. If the time budget expires, either fail the request or clearly label partial coverage and avoid offering a normal continuation cursor. A coarse cell cover keeps routing simple but creates more false candidates. Finer cells can increase routing fan-out and metadata. A cache keyed only by a rough location is unsafe for final results near a radius edge. Cache a wider pool of candidates when useful and recheck exact distance and time-sensitive eligibility. Track p95 by region, candidate volume, fan-out, stale-version drops, index lag, and partial responses."
+        }
+      ],
+      "board": [
+        {
+          "title": "Update a listing",
+          "steps": [
+            {
+              "name": "Owner API",
+              "detail": "Authorizes the edit and checks the expected version."
+            },
+            {
+              "name": "Listing store and outbox",
+              "detail": "Commit the new record and its change event together."
+            },
+            {
+              "name": "Index projector",
+              "detail": "Applies versioned updates and old-shard tombstones."
+            },
+            {
+              "name": "Regional search shards",
+              "detail": "Make updated data visible to search."
+            }
+          ]
+        },
+        {
+          "title": "Find nearby places",
+          "steps": [
+            {
+              "name": "Search API",
+              "detail": "Validates coordinates, radius, query, and page size."
+            },
+            {
+              "name": "Spatial router",
+              "detail": "Covers the circle and selects every relevant shard."
+            },
+            {
+              "name": "Search shards",
+              "detail": "Match terms, verify distance and hours, and rank candidates."
+            },
+            {
+              "name": "Results coordinator",
+              "detail": "Merges scores, checks versions, and returns a page."
+            }
+          ]
+        },
+        {
+          "title": "Recover search coverage",
+          "steps": [
+            {
+              "name": "Coordinator",
+              "detail": "Retries a timed-out shard on a replica."
+            },
+            {
+              "name": "Deadline check",
+              "detail": "Returns full results when coverage completes."
+            },
+            {
+              "name": "Client response",
+              "detail": "Marks partial coverage or reports an error when a shard is unavailable."
+            }
+          ]
+        }
+      ]
     }
   },
   "systems": [
@@ -2140,53 +2226,106 @@
         "Explain duplicate handling, out-of-order joins, uneven loss across variants, configuration changes, and late data after finalization.",
         "Discuss provisional streaming versus exact batch reconciliation, confidence intervals, and safe handling of repeated looks at the data."
       ]
+    },
+    {
+      "id": "nearby-place-search",
+      "title": "Design a nearby place search service",
+      "topic": "Geospatial discovery",
+      "tag": "Radius filtering, relevance, and spatial sharding",
+      "scenario": "Build a service where people search for places near a location using a required radius and optional text or category filters. Return ranked places, distance, and opening status. Owners can change listings, and updates should appear in search within a minute. Assume 100 million listings, 50,000 peak searches per second, and 2,000 peak listing updates per second. Aim for p95 under 150 ms for searches up to 10 km. Explain how you avoid missing matches near a city or shard boundary.",
+      "guide": [
+        "Clarify whether the radius is straight-line or travel distance, how text and distance influence rank, and when to evaluate opening hours.",
+        "Estimate 100 GB of raw searchable listing data at 1 KB per listing, plus index structures and replicas. At 50,000 searches/s and four visited shards per search, budget about 200,000 shard requests/s before retries.",
+        "Define search, listing lookup, and conditional listing updates. Model points, local hours and exceptions, listing version, and search cursors.",
+        "Draw the listing update path to a versioned search projection. Draw nearby queries passing through spatial routing, text and distance filtering, and result merging.",
+        "Trace a search crossing the antimeridian or a shard boundary. State why candidate routing and precise distance are separate checks.",
+        "Discuss stale index entries, partial results, hot neighborhoods, cursor consistency, and the limits of query caching."
+      ]
     }
   ],
   "trend": {
-    "title": "Let agents investigate incidents with read-only access",
-    "intro": "Use an agent to assemble incident evidence and prepare a handoff for the on-call engineer. For example, it can compare when checkout errors started with when a deployment rolled out and show the traces behind its hypothesis. The incident process still owns the change decision.",
+    "title": "Calibrate offline agent scores against what users experience",
+    "intro": "Offline evaluations can catch regressions before users see a change. To use a score for release decisions, first learn how well it predicts the outcome you care about in production. For a support agent, compare changes in offline task success with changes in correctly resolved cases.",
     "points": [
       {
-        "title": "Start with a scoped evidence account",
-        "text": "Give the investigator access to the affected service’s health metrics, selected logs and deployment history. Ask it to link the evidence for each hypothesis and say what observation would rule it out."
+        "title": "Pair comparable offline and online results",
+        "text": "For past prompt changes, log the offline score change and the measured A/B effect on a chosen outcome. Analyze prompt edits separately from model or tool changes if those change how the score relates to the outcome."
       },
       {
-        "title": "Make the handoff reviewable",
-        "text": "Have the investigator record the affected service, supporting observations, a proposed change, and how the operator would check recovery. Enforce any write permissions and approval checks at the tool boundary."
+        "title": "Use scores to decide which changes need an experiment",
+        "text": "While you are still learning the relationship, use an offline score to catch clear breakage and require an online test for meaningful rollout decisions. After local validation, use the estimated uncertainty to decide which low-risk changes a score can support and which still need an A/B test."
       },
       {
-        "title": "Agree on recovery signals",
-        "text": "Before a change, pick a trusted signal and time window. For checkout, the on-call engineer might watch completion rate and p95 latency against the pre-incident baseline. Rehearse on past incidents and measure useful findings and incorrect escalations."
+        "title": "Audit after adopting a faster release path",
+        "text": "Randomly send some changes from the faster path through a normal experiment. Compare observed outcomes with what the offline scores predicted. Recalibrate after a change in model, judge, or traffic mix, especially when a judge might favor one model’s answers."
       }
     ],
-    "sourceTitle": "OpenAI Developers · Production monitoring with Codex",
-    "sourceUrl": "https://developers.openai.com/blog/production-monitoring-with-codex",
-    "readingTitle": "Google Cloud · Deploying agents safely in your enterprise",
-    "readingUrl": "https://cloud.google.com/blog/products/identity-security/deploying-agents-safely-in-your-enterprise",
-    "readingSummary": "Describes separate agent identities and infrastructure policy checks, including approval for sensitive operations. Its product controls are vendor-specific.",
+    "sourceTitle": "Spotify Engineering · When Can You Ship on Offline Evals Alone?",
+    "sourceUrl": "https://engineering.atspotify.com/2026/11/when-can-you-ship-on-offline-evals-alone",
+    "readingTitle": "Anthropic · Demystifying evals for AI agents",
+    "readingUrl": "https://www.anthropic.com/research/demystifying-evals-for-ai-agents",
+    "readingSummary": "Describes using offline evaluations alongside production monitoring, user feedback, and manual transcript review.",
     "sources": [
       {
-        "title": "OpenAI Developers · Production monitoring with Codex",
-        "url": "https://developers.openai.com/blog/production-monitoring-with-codex",
-        "note": "Shows a production triage workflow that starts with limited evidence access, presents findings to a human reviewer, and checks recovery after a change."
+        "title": "Spotify Engineering · When Can You Ship on Offline Evals Alone?",
+        "url": "https://engineering.atspotify.com/2026/11/when-can-you-ship-on-offline-evals-alone",
+        "note": "The authors derive a release decision rule under specific assumptions and propose randomized audits to detect when offline scores stop predicting online effects."
       },
       {
-        "title": "Google Cloud · Deploying agents safely in your enterprise",
-        "url": "https://cloud.google.com/blog/products/identity-security/deploying-agents-safely-in-your-enterprise",
-        "note": "Describes separate agent identities and infrastructure policy checks, including approval for sensitive operations. Its product controls are vendor-specific."
-      },
-      {
-        "title": "Google Cloud · Five must-have guides to move agents into production",
-        "url": "https://cloud.google.com/blog/topics/developers-practitioners/five-guides-to-building-and-scaling-production-ready-ai-agents",
-        "note": "The governance and delegated approval examples provide additional context for separating investigation access from change approval."
+        "title": "Anthropic · Demystifying evals for AI agents",
+        "url": "https://www.anthropic.com/research/demystifying-evals-for-ai-agents",
+        "note": "Describes using offline evaluations alongside production monitoring, user feedback, and manual transcript review."
       }
     ],
-    "reviewSummary": "Rechecked the production monitoring case study and Google Cloud’s guidance on delegated approvals and agent governance, and looked for developments since 25 Nov. The material reviewed supports scoped evidence access, an operator-owned change decision, and explicit recovery checks. The current recommendation still applies.",
-    "reviewed": "2026-11-26",
-    "updated": "2026-11-25"
+    "reviewSummary": "Across the production sources reviewed, Spotify’s analysis adds a release practice to the evaluation advice in the archive. It distinguishes catching a regression offline from predicting an effect on users. Its decision rule depends on comparable historical changes, noisy measurements, and a stable relationship between offline and online outcomes. Teams need their own paired data and audits before using it.",
+    "reviewed": "2026-11-27",
+    "updated": "2026-11-27"
   },
-  "featuredSystemId": "experiment-analysis-platform",
+  "featuredSystemId": "nearby-place-search",
   "trendHistory": [
+    {
+      "title": "Let agents investigate incidents with read-only access",
+      "intro": "Use an agent to assemble incident evidence and prepare a handoff for the on-call engineer. For example, it can compare when checkout errors started with when a deployment rolled out and show the traces behind its hypothesis. The incident process still owns the change decision.",
+      "points": [
+        {
+          "title": "Start with a scoped evidence account",
+          "text": "Give the investigator access to the affected service’s health metrics, selected logs and deployment history. Ask it to link the evidence for each hypothesis and say what observation would rule it out."
+        },
+        {
+          "title": "Make the handoff reviewable",
+          "text": "Have the investigator record the affected service, supporting observations, a proposed change, and how the operator would check recovery. Enforce any write permissions and approval checks at the tool boundary."
+        },
+        {
+          "title": "Agree on recovery signals",
+          "text": "Before a change, pick a trusted signal and time window. For checkout, the on-call engineer might watch completion rate and p95 latency against the pre-incident baseline. Rehearse on past incidents and measure useful findings and incorrect escalations."
+        }
+      ],
+      "sourceTitle": "OpenAI Developers · Production monitoring with Codex",
+      "sourceUrl": "https://developers.openai.com/blog/production-monitoring-with-codex",
+      "readingTitle": "Google Cloud · Deploying agents safely in your enterprise",
+      "readingUrl": "https://cloud.google.com/blog/products/identity-security/deploying-agents-safely-in-your-enterprise",
+      "readingSummary": "Describes separate agent identities and infrastructure policy checks, including approval for sensitive operations. Its product controls are vendor-specific.",
+      "sources": [
+        {
+          "title": "OpenAI Developers · Production monitoring with Codex",
+          "url": "https://developers.openai.com/blog/production-monitoring-with-codex",
+          "note": "Shows a production triage workflow that starts with limited evidence access, presents findings to a human reviewer, and checks recovery after a change."
+        },
+        {
+          "title": "Google Cloud · Deploying agents safely in your enterprise",
+          "url": "https://cloud.google.com/blog/products/identity-security/deploying-agents-safely-in-your-enterprise",
+          "note": "Describes separate agent identities and infrastructure policy checks, including approval for sensitive operations. Its product controls are vendor-specific."
+        },
+        {
+          "title": "Google Cloud · Five must-have guides to move agents into production",
+          "url": "https://cloud.google.com/blog/topics/developers-practitioners/five-guides-to-building-and-scaling-production-ready-ai-agents",
+          "note": "The governance and delegated approval examples provide additional context for separating investigation access from change approval."
+        }
+      ],
+      "reviewSummary": "Rechecked the production monitoring case study and Google Cloud’s guidance on delegated approvals and agent governance, and looked for developments since 25 Nov. The material reviewed supports scoped evidence access, an operator-owned change decision, and explicit recovery checks. The current recommendation still applies.",
+      "reviewed": "2026-11-26",
+      "updated": "2026-11-25"
+    },
     {
       "title": "Test what an agent actually changed",
       "intro": "A useful agent evaluation checks two things. Did the task succeed in the system, and did the agent get there through an acceptable sequence of actions? Start with an outcome you can inspect, then use the trace to understand failures.",
