@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-11-27T08:07:12+08:00",
+  "lastUpdated": "2026-11-27T23:12:19+08:00",
   "systemSolutions": {
     "rate-limiter": {
       "intro": "A strong design makes the policy explicit, enforces it near the request path, and chooses a clear consistency tradeoff.",
@@ -31,17 +31,42 @@
             },
             {
               "name": "Gateway",
-              "detail": "Identifies caller and rate policy"
+              "detail": "Identifies caller and rate policy",
+              "stackIds": [
+                "gateway"
+              ]
             },
             {
               "name": "Counter store",
-              "detail": "Atomically refills and consumes a token"
+              "detail": "Atomically refills and consumes a token",
+              "stackIds": [
+                "bucket"
+              ]
             },
             {
               "name": "Gateway decision",
-              "detail": "Forward or return 429"
+              "detail": "Forward or return 429",
+              "stackIds": [
+                "gateway"
+              ]
             }
           ]
+        }
+      ],
+      "stack": [
+        {
+          "id": "gateway",
+          "name": "Envoy + Go",
+          "role": "Request admission.",
+          "reason": "Envoy calls a Go rate limit service before forwarding protected requests.",
+          "tradeoff": "The extra RPC needs a short timeout and an explicit failure policy."
+        },
+        {
+          "id": "bucket",
+          "name": "Redis Cluster",
+          "role": "Token bucket state.",
+          "reason": "A Lua script refills and consumes the tokens in one operation on the shard that owns the key.",
+          "tradeoff": "A hot key can saturate one shard. Asynchronous replica failover can lose recent counts, so use a stronger store if the quota must be exact through failover."
         }
       ]
     },
@@ -79,7 +104,10 @@
             },
             {
               "name": "Link store",
-              "detail": "Persists the code and destination"
+              "detail": "Persists the code and destination",
+              "stackIds": [
+                "links"
+              ]
             }
           ]
         },
@@ -92,13 +120,59 @@
             },
             {
               "name": "Redirect service",
-              "detail": "Reads the cache or link store"
+              "detail": "Reads the cache or link store",
+              "stackIds": [
+                "links",
+                "edge"
+              ]
             },
             {
               "name": "Browser",
               "detail": "Follows the redirect to the destination"
             }
           ]
+        },
+        {
+          "title": "Measure clicks",
+          "steps": [
+            {
+              "name": "Edge access logs",
+              "detail": "Record redirects that are served at the edge.",
+              "stackIds": [
+                "edge"
+              ]
+            },
+            {
+              "name": "Analytics stream",
+              "detail": "Buffers access records for asynchronous aggregation.",
+              "stackIds": [
+                "analytics"
+              ]
+            }
+          ]
+        }
+      ],
+      "stack": [
+        {
+          "id": "links",
+          "name": "Amazon DynamoDB",
+          "role": "Short code lookup.",
+          "reason": "Use the code as the partition key and a conditional put to reject collisions.",
+          "tradeoff": "Fixed key lookups work well, but owner listings need a separate index and global replicas can lag."
+        },
+        {
+          "id": "edge",
+          "name": "Amazon CloudFront",
+          "role": "Redirect cache.",
+          "reason": "Cache high traffic destinations near readers with a bounded TTL.",
+          "tradeoff": "Long TTLs reduce origin reads and slow takedowns. Use explicit invalidation for urgent changes."
+        },
+        {
+          "id": "analytics",
+          "name": "Amazon Kinesis Data Streams",
+          "role": "Click analytics.",
+          "reason": "Publish cache-hit access logs from the edge to an asynchronous analytics pipeline.",
+          "tradeoff": "Analytics are eventually available and need deduplication."
         }
       ]
     },
@@ -132,21 +206,58 @@
             },
             {
               "name": "Notification service",
-              "detail": "Checks preferences and records the request"
+              "detail": "Checks preferences and records the request",
+              "stackIds": [
+                "state"
+              ]
             },
             {
               "name": "Channel queues",
-              "detail": "Separate email, push, and SMS jobs"
+              "detail": "Separate email, push, and SMS jobs",
+              "stackIds": [
+                "queues"
+              ]
             },
             {
               "name": "Delivery worker",
-              "detail": "Calls provider and records the attempt"
+              "detail": "Calls provider and records the attempt",
+              "stackIds": [
+                "queues",
+                "providers"
+              ]
             },
             {
               "name": "Provider callback",
-              "detail": "Updates delivery status"
+              "detail": "Updates delivery status",
+              "stackIds": [
+                "state",
+                "providers"
+              ]
             }
           ]
+        }
+      ],
+      "stack": [
+        {
+          "id": "state",
+          "name": "Amazon DynamoDB",
+          "role": "Notification state.",
+          "reason": "Conditional writes deduplicate request IDs and store delivery progress for each channel. Commit a dispatch record with the state change.",
+          "tradeoff": "Retrying against a provider can still duplicate a send when the provider has no idempotency support."
+        },
+        {
+          "id": "queues",
+          "name": "Amazon SQS",
+          "role": "Channel queues.",
+          "reason": "Separate email, SMS, and push queues with independent worker limits and dead-letter queues.",
+          "tradeoff": "Standard queues can deliver a message more than once or out of order."
+        },
+        {
+          "id": "providers",
+          "name": "Amazon SES + Twilio + FCM",
+          "role": "External delivery.",
+          "reason": "Route email, SMS, and push to separate providers and persist each attempt.",
+          "tradeoff": "Provider rate limits and delivery acknowledgement semantics differ by channel."
         }
       ]
     },
@@ -180,11 +291,19 @@
             },
             {
               "name": "Post service",
-              "detail": "Stores post and emits an event"
+              "detail": "Stores post and emits an event",
+              "stackIds": [
+                "posts",
+                "events"
+              ]
             },
             {
               "name": "Fanout workers",
-              "detail": "Add post IDs to follower inboxes where appropriate"
+              "detail": "Add post IDs to follower inboxes where appropriate",
+              "stackIds": [
+                "events",
+                "inbox"
+              ]
             }
           ]
         },
@@ -197,7 +316,11 @@
             },
             {
               "name": "Feed service",
-              "detail": "Combines inbox entries and posts from large accounts"
+              "detail": "Combines inbox entries and posts from large accounts",
+              "stackIds": [
+                "posts",
+                "inbox"
+              ]
             },
             {
               "name": "Ranking and filtering",
@@ -208,6 +331,29 @@
               "detail": "Receives results with a cursor"
             }
           ]
+        }
+      ],
+      "stack": [
+        {
+          "id": "posts",
+          "name": "PostgreSQL",
+          "role": "Posts and social graph.",
+          "reason": "Store posts and follower edges. Commit each post with an outbox event before fanout.",
+          "tradeoff": "High throughput may need user-based partitioning and separate indexes for incoming and outgoing edges."
+        },
+        {
+          "id": "events",
+          "name": "Apache Kafka",
+          "role": "Publish and fanout stream.",
+          "reason": "Consumers can replay publication events and retry inbox writes after outages.",
+          "tradeoff": "Replays can deliver an event twice. Key each inbox entry by user and post to make inserts idempotent."
+        },
+        {
+          "id": "inbox",
+          "name": "Amazon DynamoDB",
+          "role": "Per-user inbox.",
+          "reason": "Partition by reader and query the most recent entries by a timestamp and post ID sort key.",
+          "tradeoff": "Large accounts create write amplification. Merge their posts at read time instead of copying them to every inbox."
         }
       ]
     },
@@ -241,21 +387,46 @@
             },
             {
               "name": "Object storage",
-              "detail": "Stores uploaded bytes"
+              "detail": "Stores uploaded bytes",
+              "stackIds": [
+                "objects"
+              ]
             },
             {
               "name": "Metadata service",
-              "detail": "Commits the new file version"
+              "detail": "Commits the new file version",
+              "stackIds": [
+                "metadata"
+              ]
             },
             {
               "name": "Change log",
-              "detail": "Records the version change"
+              "detail": "Records the version change",
+              "stackIds": [
+                "metadata"
+              ]
             },
             {
               "name": "Other clients",
               "detail": "Read changes with a cursor"
             }
           ]
+        }
+      ],
+      "stack": [
+        {
+          "id": "objects",
+          "name": "Amazon S3",
+          "role": "Durable file chunks.",
+          "reason": "Upload directly with multipart sessions and verify checksums before publishing a manifest.",
+          "tradeoff": "An uploaded object and a database commit are separate operations. Expire unattached uploads and reconcile gaps."
+        },
+        {
+          "id": "metadata",
+          "name": "MySQL (InnoDB)",
+          "role": "Metadata and version changes.",
+          "reason": "Commit the current file version, part manifest, and change record in one transaction.",
+          "tradeoff": "An ordering scheme for sync cursors must handle concurrent commits. Segment the feed by account to contain contention."
         }
       ]
     },
@@ -285,25 +456,63 @@
           "steps": [
             {
               "name": "Agent",
-              "detail": "Batches labeled time series"
+              "detail": "Batches labeled time series",
+              "stackIds": [
+                "ingest"
+              ]
             },
             {
               "name": "Ingest gateway",
-              "detail": "Validates payload and enforces limits"
+              "detail": "Validates payload and enforces limits",
+              "stackIds": [
+                "ingest"
+              ]
             },
             {
               "name": "Partitioned stream",
-              "detail": "Buffers points by series"
+              "detail": "Buffers points by series",
+              "stackIds": [
+                "stream"
+              ]
             },
             {
               "name": "Time-series store",
-              "detail": "Persists points and rollups"
+              "detail": "Persists points and rollups",
+              "stackIds": [
+                "metrics"
+              ]
             },
             {
               "name": "Query service",
-              "detail": "Reads time ranges for dashboards"
+              "detail": "Reads time ranges for dashboards",
+              "stackIds": [
+                "metrics"
+              ]
             }
           ]
+        }
+      ],
+      "stack": [
+        {
+          "id": "ingest",
+          "name": "OpenTelemetry Collector",
+          "role": "Agent and ingest batching.",
+          "reason": "Accept OTLP metric batches and apply bounded queues, resource labels, and ingress controls.",
+          "tradeoff": "More buffering absorbs bursts but adds lag, and labels still need cardinality limits."
+        },
+        {
+          "id": "stream",
+          "name": "Apache Kafka",
+          "role": "Partitioned ingest log.",
+          "reason": "Buffer compressed batches by tenant and series identity for replay and backpressure.",
+          "tradeoff": "Replay can duplicate points. Decide how the storage writer handles repeated samples."
+        },
+        {
+          "id": "metrics",
+          "name": "ClickHouse",
+          "role": "Time range queries and rollups.",
+          "reason": "Store compressed metric columns in MergeTree tables and materialize common time buckets.",
+          "tradeoff": "High label cardinality and excessive small inserts increase memory and merge costs."
         }
       ]
     },
@@ -333,25 +542,56 @@
           "steps": [
             {
               "name": "Job API",
-              "detail": "Stores the schedule definition"
+              "detail": "Stores the schedule definition",
+              "stackIds": [
+                "scheduler"
+              ]
             },
             {
               "name": "Scheduler",
-              "detail": "Creates a durable run when due"
+              "detail": "Creates a durable run when due",
+              "stackIds": [
+                "scheduler"
+              ]
             },
             {
               "name": "Queue",
-              "detail": "Delivers work to a worker"
+              "detail": "Delivers work to a worker",
+              "stackIds": [
+                "work"
+              ]
             },
             {
               "name": "Worker",
-              "detail": "Executes with a run ID for deduplication"
+              "detail": "Executes with a run ID for deduplication",
+              "stackIds": [
+                "work"
+              ]
             },
             {
               "name": "Run store",
-              "detail": "Records outcome or retry state"
+              "detail": "Records outcome or retry state",
+              "stackIds": [
+                "scheduler"
+              ]
             }
           ]
+        }
+      ],
+      "stack": [
+        {
+          "id": "scheduler",
+          "name": "PostgreSQL",
+          "role": "Due jobs and run state.",
+          "reason": "Index due jobs by time and shard. Claim with FOR UPDATE SKIP LOCKED and commit a run with an outbox row.",
+          "tradeoff": "Large bursts can still strain the database. Pace claims and keep transactions short."
+        },
+        {
+          "id": "work",
+          "name": "Amazon SQS",
+          "role": "Execution queue.",
+          "reason": "Use visibility timeouts for abandoned work and a dead-letter queue for exhausted retries.",
+          "tradeoff": "Queue delivery is at least once. Workers still need a stable run ID and an idempotent side effect."
         }
       ]
     },
@@ -385,21 +625,58 @@
             },
             {
               "name": "Gateway",
-              "detail": "Authenticates the sender and conversation"
+              "detail": "Authenticates the sender and conversation",
+              "stackIds": [
+                "socket"
+              ]
             },
             {
               "name": "Message store",
-              "detail": "Persists and orders messages within the conversation"
+              "detail": "Persists and orders messages within the conversation",
+              "stackIds": [
+                "log",
+                "history"
+              ]
             },
             {
               "name": "Fanout workers",
-              "detail": "Deliver to online gateways"
+              "detail": "Deliver to online gateways",
+              "stackIds": [
+                "log"
+              ]
             },
             {
               "name": "Recipient",
-              "detail": "Receives live updates or catches up later"
+              "detail": "Receives live updates or catches up later",
+              "stackIds": [
+                "socket",
+                "history"
+              ]
             }
           ]
+        }
+      ],
+      "stack": [
+        {
+          "id": "socket",
+          "name": "Go + WebSockets",
+          "role": "Live client sessions.",
+          "reason": "Keep authenticated persistent connections for send, receive, and reconnect flows.",
+          "tradeoff": "A gateway restart drops live sessions. Clients reconnect and catch up from a cursor."
+        },
+        {
+          "id": "log",
+          "name": "Apache Kafka",
+          "role": "Durable conversation log.",
+          "reason": "Key messages by conversation for per-conversation sequencing and fanout replay.",
+          "tradeoff": "A very large conversation can overload one partition. Separate notification fanout from the write path."
+        },
+        {
+          "id": "history",
+          "name": "Amazon DynamoDB",
+          "role": "Paged conversation history.",
+          "reason": "Project accepted messages to a table queried by conversation and sequence, with bucketed partitions for long histories.",
+          "tradeoff": "The history projection can lag the live log. Track its applied cursor and fill missing messages from retained data."
         }
       ]
     },
@@ -433,15 +710,24 @@
             },
             {
               "name": "Object storage",
-              "detail": "Keeps the original bytes"
+              "detail": "Keeps the original bytes",
+              "stackIds": [
+                "blobs"
+              ]
             },
             {
               "name": "Transcode workers",
-              "detail": "Produce renditions and segments"
+              "detail": "Produce renditions and segments",
+              "stackIds": [
+                "encode"
+              ]
             },
             {
               "name": "Publisher",
-              "detail": "Makes the manifest available when ready"
+              "detail": "Makes the manifest available when ready",
+              "stackIds": [
+                "blobs"
+              ]
             }
           ]
         },
@@ -454,13 +740,39 @@
             },
             {
               "name": "CDN",
-              "detail": "Serves cached segments or fetches from origin"
+              "detail": "Serves cached segments or fetches from origin",
+              "stackIds": [
+                "cdn"
+              ]
             },
             {
               "name": "Player",
               "detail": "Adapts bitrate to current bandwidth"
             }
           ]
+        }
+      ],
+      "stack": [
+        {
+          "id": "blobs",
+          "name": "Amazon S3",
+          "role": "Media origin.",
+          "reason": "Keep source uploads and rendered segments in object storage, with direct multipart upload.",
+          "tradeoff": "Publishing manifests must wait for all referenced segments to exist."
+        },
+        {
+          "id": "encode",
+          "name": "Amazon SQS + FFmpeg",
+          "role": "Transcode workers.",
+          "reason": "Queue media jobs and produce compatible HLS renditions at multiple bitrates.",
+          "tradeoff": "Encoding absorbs CPU and delay. Use repeatable job keys and avoid publishing partial output."
+        },
+        {
+          "id": "cdn",
+          "name": "Amazon CloudFront",
+          "role": "Segment delivery.",
+          "reason": "Cache HLS media segments near viewers and scope private playback with signed access.",
+          "tradeoff": "A cold or popular asset can still stress the origin. Track cache hits and size the origin for misses."
         }
       ]
     },
@@ -494,7 +806,10 @@
             },
             {
               "name": "Geo index",
-              "detail": "Stores recent locations by cell and expires stale entries."
+              "detail": "Stores recent locations by cell and expires stale entries.",
+              "stackIds": [
+                "geo"
+              ]
             }
           ]
         },
@@ -507,17 +822,42 @@
             },
             {
               "name": "Matching service",
-              "detail": "Queries nearby cells and ranks eligible drivers"
+              "detail": "Queries nearby cells and ranks eligible drivers",
+              "stackIds": [
+                "geo"
+              ]
             },
             {
               "name": "Offer service",
-              "detail": "Commits the first valid acceptance"
+              "detail": "Commits the first valid acceptance",
+              "stackIds": [
+                "trips"
+              ]
             },
             {
               "name": "Trip service",
-              "detail": "Notifies both parties"
+              "detail": "Notifies both parties",
+              "stackIds": [
+                "trips"
+              ]
             }
           ]
+        }
+      ],
+      "stack": [
+        {
+          "id": "geo",
+          "name": "H3 + Redis Cluster",
+          "role": "Live driver location index.",
+          "reason": "Map coordinates to H3 cells and store recent positions in time sorted sets. Search neighboring cells and filter by distance.",
+          "tradeoff": "Moving between cells can briefly leave stale or duplicate entries. Recheck timestamps and the latest driver position."
+        },
+        {
+          "id": "trips",
+          "name": "PostgreSQL",
+          "role": "Trip and offer state.",
+          "reason": "Commit a valid offer acceptance and driver assignment together in a transaction.",
+          "tradeoff": "Popular drivers and city partition boundaries can create contention. Keep an assignment authority per driver."
         }
       ]
     },
@@ -551,11 +891,18 @@
             },
             {
               "name": "Aggregation job",
-              "detail": "Counts popularity and filters terms"
+              "detail": "Counts popularity and filters terms",
+              "stackIds": [
+                "build"
+              ]
             },
             {
               "name": "Index builder",
-              "detail": "Publishes a regional suggestion index"
+              "detail": "Publishes a regional suggestion index",
+              "stackIds": [
+                "build",
+                "index"
+              ]
             }
           ]
         },
@@ -568,7 +915,11 @@
             },
             {
               "name": "Suggestion service",
-              "detail": "Looks up the prefix in cache or index"
+              "detail": "Looks up the prefix in cache or index",
+              "stackIds": [
+                "index",
+                "cache"
+              ]
             },
             {
               "name": "Ranker",
@@ -579,6 +930,29 @@
               "detail": "Shows top matches"
             }
           ]
+        }
+      ],
+      "stack": [
+        {
+          "id": "build",
+          "name": "Apache Spark",
+          "role": "Suggestion aggregation.",
+          "reason": "Count permitted query signals by prefix and locale to produce versioned candidate snapshots.",
+          "tradeoff": "Batch publication means a fresh query may not influence suggestions until the next build."
+        },
+        {
+          "id": "index",
+          "name": "Lucene FST",
+          "role": "Compact suggestion index.",
+          "reason": "Serve weighted prefix candidates from a versioned finite-state index and swap snapshots atomically.",
+          "tradeoff": "Memory footprint depends on vocabulary and languages. Rebuild snapshots to apply broad changes."
+        },
+        {
+          "id": "cache",
+          "name": "Redis",
+          "role": "Hot prefix cache.",
+          "reason": "Cache candidate lists by normalized prefix, locale, and index version before personalization.",
+          "tradeoff": "A coarse cache key can mix locales or versions. Keep personal reranking outside the shared entry."
         }
       ]
     },
@@ -612,21 +986,56 @@
             },
             {
               "name": "Object store",
-              "detail": "Persists file chunks"
+              "detail": "Persists file chunks",
+              "stackIds": [
+                "objects"
+              ]
             },
             {
               "name": "Metadata service",
-              "detail": "Advances the file version"
+              "detail": "Advances the file version",
+              "stackIds": [
+                "sync"
+              ]
             },
             {
               "name": "Change log",
-              "detail": "Records the update"
+              "detail": "Records the update",
+              "stackIds": [
+                "sync"
+              ]
             },
             {
               "name": "Other devices",
-              "detail": "Fetch changes since their cursor"
+              "detail": "Fetch changes since their cursor",
+              "stackIds": [
+                "notify"
+              ]
             }
           ]
+        }
+      ],
+      "stack": [
+        {
+          "id": "objects",
+          "name": "Amazon S3",
+          "role": "File parts and versions.",
+          "reason": "Store immutable blobs by tenant and content hash, with resumable multipart uploads.",
+          "tradeoff": "Deleting a file requires retaining referenced versions and collecting orphaned parts later."
+        },
+        {
+          "id": "sync",
+          "name": "PostgreSQL",
+          "role": "File metadata and change log.",
+          "reason": "Commit the version and an ordered change record while updating the file’s current revision.",
+          "tradeoff": "Serialize cursor ordering per account or use a committed log offset. A global cursor can become a hotspot."
+        },
+        {
+          "id": "notify",
+          "name": "WebSockets",
+          "role": "Sync wakeups.",
+          "reason": "Tell connected devices that new changes exist. Devices still fetch the durable feed from a cursor.",
+          "tradeoff": "Sockets drop. Reconnecting clients must poll or resume with the last applied cursor."
         }
       ]
     },
@@ -656,25 +1065,63 @@
           "steps": [
             {
               "name": "URL frontier",
-              "detail": "Schedules normalized URLs by host"
+              "detail": "Schedules normalized URLs by host",
+              "stackIds": [
+                "frontier"
+              ]
             },
             {
               "name": "Fetcher",
-              "detail": "Applies robots policy and per-host limits"
+              "detail": "Applies robots policy and per-host limits",
+              "stackIds": [
+                "worker"
+              ]
             },
             {
               "name": "Parser",
-              "detail": "Extracts content and links"
+              "detail": "Extracts content and links",
+              "stackIds": [
+                "worker"
+              ]
             },
             {
               "name": "Storage",
-              "detail": "Records content fingerprints and fetch state"
+              "detail": "Records content fingerprints and fetch state",
+              "stackIds": [
+                "objects"
+              ]
             },
             {
               "name": "URL frontier",
-              "detail": "Schedules new eligible links and recrawls"
+              "detail": "Schedules new eligible links and recrawls",
+              "stackIds": [
+                "frontier"
+              ]
             }
           ]
+        }
+      ],
+      "stack": [
+        {
+          "id": "frontier",
+          "name": "Amazon DynamoDB",
+          "role": "Frontier and crawl leases.",
+          "reason": "Store normalized URL state, schedule by host and due bucket, and claim work with a conditional lease update.",
+          "tradeoff": "A secondary index can lag and return stale candidates. Confirm eligibility on the authoritative item when claiming."
+        },
+        {
+          "id": "worker",
+          "name": "Python + Scrapy",
+          "role": "Fetching and parsing.",
+          "reason": "Use bounded concurrency and robots policy, then apply per-host scheduling before sending requests.",
+          "tradeoff": "A single worker’s politeness limit is insufficient across a fleet. Assign host ownership or coordinate the limit."
+        },
+        {
+          "id": "objects",
+          "name": "Amazon S3",
+          "role": "Fetched content.",
+          "reason": "Store response bodies by fingerprint and keep crawl metadata separately.",
+          "tradeoff": "Durable archives make reprocessing possible but need quotas, retention, and safeguards for sensitive content."
         }
       ]
     },
@@ -704,25 +1151,64 @@
           "steps": [
             {
               "name": "Editor",
-              "detail": "Sends a local operation"
+              "detail": "Sends a local operation",
+              "stackIds": [
+                "crdt"
+              ]
             },
             {
               "name": "Connection gateway",
-              "detail": "Checks document membership"
+              "detail": "Checks document membership",
+              "stackIds": [
+                "socket"
+              ]
             },
             {
               "name": "Collaboration service",
-              "detail": "Orders or merges concurrent edits"
+              "detail": "Orders or merges concurrent edits",
+              "stackIds": [
+                "crdt"
+              ]
             },
             {
               "name": "Operation log",
-              "detail": "Persists accepted changes"
+              "detail": "Persists accepted changes",
+              "stackIds": [
+                "ops"
+              ]
             },
             {
               "name": "Peers",
-              "detail": "Apply the broadcast or replay missed changes"
+              "detail": "Apply the broadcast or replay missed changes",
+              "stackIds": [
+                "crdt",
+                "socket"
+              ]
             }
           ]
+        }
+      ],
+      "stack": [
+        {
+          "id": "crdt",
+          "name": "Yjs",
+          "role": "Document merging.",
+          "reason": "Use a text CRDT so clients can apply and merge edits after disconnects.",
+          "tradeoff": "Large documents need compaction and snapshots. Membership checks still belong on the server."
+        },
+        {
+          "id": "socket",
+          "name": "WebSockets",
+          "role": "Live updates.",
+          "reason": "Broadcast accepted changes to room members and close or reauthorize revoked sessions.",
+          "tradeoff": "A socket is ephemeral. Reconnects need a durable source of missed edits."
+        },
+        {
+          "id": "ops",
+          "name": "PostgreSQL",
+          "role": "Update log and snapshots.",
+          "reason": "Store updates by document and operation ID, deduplicate retries, and write periodic snapshots.",
+          "tradeoff": "Hot documents can concentrate writes. Bound the log between snapshots to keep reconnects cheap."
         }
       ]
     },
@@ -756,11 +1242,17 @@
             },
             {
               "name": "Cache client",
-              "detail": "Routes the key to its shard"
+              "detail": "Routes the key to its shard",
+              "stackIds": [
+                "proxy"
+              ]
             },
             {
               "name": "Shard",
-              "detail": "Returns a live cached value or a miss"
+              "detail": "Returns a live cached value or a miss",
+              "stackIds": [
+                "memory"
+              ]
             },
             {
               "name": "Application",
@@ -768,9 +1260,28 @@
             },
             {
               "name": "Shard",
-              "detail": "Stores the eligible fill with a TTL"
+              "detail": "Stores the eligible fill with a TTL",
+              "stackIds": [
+                "memory"
+              ]
             }
           ]
+        }
+      ],
+      "stack": [
+        {
+          "id": "proxy",
+          "name": "Twemproxy",
+          "role": "Consistent hash routing.",
+          "reason": "Route keys with a cache proxy using a consistent hash continuum.",
+          "tradeoff": "Proxy routing needs coordinated membership updates. Resharding can produce cold misses."
+        },
+        {
+          "id": "memory",
+          "name": "Memcached",
+          "role": "Disposable in-memory cache.",
+          "reason": "Use TTL and eviction for individual cached keys while keeping the database authoritative.",
+          "tradeoff": "Node loss drops cached entries. Protect the origin with request coalescing and concurrency limits."
         }
       ]
     },
@@ -796,6 +1307,25 @@
       ],
       "board": [
         {
+          "title": "Browse and enter checkout",
+          "steps": [
+            {
+              "name": "Event pages",
+              "detail": "Serve cached public pages for browsing.",
+              "stackIds": [
+                "browse"
+              ]
+            },
+            {
+              "name": "Waiting room",
+              "detail": "Admit buyers into checkout at a controlled rate.",
+              "stackIds": [
+                "admission"
+              ]
+            }
+          ]
+        },
+        {
           "title": "Reserve and buy a seat",
           "steps": [
             {
@@ -804,21 +1334,60 @@
             },
             {
               "name": "Inventory service",
-              "detail": "Creates an atomic, expiring hold"
+              "detail": "Creates an atomic, expiring hold",
+              "stackIds": [
+                "inventory"
+              ]
             },
             {
               "name": "Payment provider",
-              "detail": "Authorizes the charge"
+              "detail": "Authorizes the charge",
+              "stackIds": [
+                "payments"
+              ]
             },
             {
               "name": "Order service",
-              "detail": "Confirms the purchase against the hold"
+              "detail": "Confirms the purchase against the hold",
+              "stackIds": [
+                "inventory"
+              ]
             },
             {
               "name": "Ticket service",
               "detail": "Issues the confirmed ticket"
             }
           ]
+        }
+      ],
+      "stack": [
+        {
+          "id": "browse",
+          "name": "Amazon CloudFront",
+          "role": "Event page delivery.",
+          "reason": "Cache public event pages at the edge.",
+          "tradeoff": "Cached pages can lag inventory. Checkout must confirm the selected seat from the source of truth."
+        },
+        {
+          "id": "admission",
+          "name": "Redis",
+          "role": "Checkout admission.",
+          "reason": "Keep short-lived admission tokens and counters for the waiting room.",
+          "tradeoff": "Lost tokens may require re-admission. The waiting room does not reserve seats."
+        },
+        {
+          "id": "inventory",
+          "name": "MySQL (InnoDB)",
+          "role": "Authoritative seat inventory.",
+          "reason": "Lock or conditionally update the seat row, then commit the hold or sale with a unique reservation ID.",
+          "tradeoff": "Contention rises for a popular event. Admit fewer checkouts and shard by event where feasible."
+        },
+        {
+          "id": "payments",
+          "name": "Stripe PaymentIntents",
+          "role": "Card authorization.",
+          "reason": "Use a stable idempotency key and reconcile provider events before confirming a ticket.",
+          "tradeoff": "An external charge cannot commit in the seat transaction. Handle late callbacks and compensating refunds."
         }
       ]
     },
@@ -848,25 +1417,64 @@
           "steps": [
             {
               "name": "Producer",
-              "detail": "Sends a durable event"
+              "detail": "Sends a durable event",
+              "stackIds": [
+                "eventlog"
+              ]
             },
             {
               "name": "Subscription service",
-              "detail": "Finds matching endpoints"
+              "detail": "Finds matching endpoints",
+              "stackIds": [
+                "eventlog",
+                "control"
+              ]
             },
             {
               "name": "Endpoint queues",
-              "detail": "Isolate slow destinations"
+              "detail": "Isolate slow destinations",
+              "stackIds": [
+                "eventlog"
+              ]
             },
             {
               "name": "Delivery workers",
-              "detail": "Sign and send HTTP requests"
+              "detail": "Sign and send HTTP requests",
+              "stackIds": [
+                "workers"
+              ]
             },
             {
               "name": "Attempt store",
-              "detail": "Records the outcome for retries and status"
+              "detail": "Records the outcome for retries and status",
+              "stackIds": [
+                "control"
+              ]
             }
           ]
+        }
+      ],
+      "stack": [
+        {
+          "id": "eventlog",
+          "name": "Apache Kafka",
+          "role": "Durable delivery event stream.",
+          "reason": "Replay accepted events and fan out using stable delivery IDs.",
+          "tradeoff": "Partition ordering alone does not prevent one slow endpoint from delaying others. Apply fair endpoint scheduling."
+        },
+        {
+          "id": "control",
+          "name": "Sharded PostgreSQL",
+          "role": "Endpoints, outbox, and attempts.",
+          "reason": "Commit event intake with an outbox per tenant shard and index pending deliveries and attempts for replay.",
+          "tradeoff": "High fanout makes attempt rows grow quickly. Partition by time and move older history to cheaper storage."
+        },
+        {
+          "id": "workers",
+          "name": "Go HTTP worker pool",
+          "role": "Outbound delivery.",
+          "reason": "Use bounded concurrency and connection reuse, with time limits and per-endpoint pacing.",
+          "tradeoff": "A network timeout leaves delivery ambiguous. Recipients should deduplicate the stable delivery ID."
         }
       ]
     },
@@ -900,21 +1508,57 @@
             },
             {
               "name": "Payments API",
-              "detail": "Records the intent and outbox event"
+              "detail": "Records the intent and outbox event",
+              "stackIds": [
+                "ledger"
+              ]
             },
             {
               "name": "Provider worker",
-              "detail": "Sends an authorization request"
+              "detail": "Sends an authorization request",
+              "stackIds": [
+                "queue",
+                "acquirer"
+              ]
             },
             {
               "name": "Provider callback",
-              "detail": "Advances payment state"
+              "detail": "Advances payment state",
+              "stackIds": [
+                "acquirer"
+              ]
             },
             {
               "name": "Ledger",
-              "detail": "Records the resulting money movement"
+              "detail": "Records the resulting money movement",
+              "stackIds": [
+                "ledger"
+              ]
             }
           ]
+        }
+      ],
+      "stack": [
+        {
+          "id": "ledger",
+          "name": "MySQL (InnoDB)",
+          "role": "Payment state and ledger.",
+          "reason": "Commit the intent transition and outbox together, with balanced ledger entries committed atomically on their owning shard.",
+          "tradeoff": "Cross-shard money movement needs a separate settlement protocol. Never use a read replica to enforce a balance invariant."
+        },
+        {
+          "id": "queue",
+          "name": "Amazon SQS",
+          "role": "Payment workflow dispatch.",
+          "reason": "Relay outbox events to provider and reconciliation workers.",
+          "tradeoff": "Retries can arrive more than once and out of order. Deduplicate and enforce allowed state transitions."
+        },
+        {
+          "id": "acquirer",
+          "name": "Stripe PaymentIntents",
+          "role": "Provider authorization and capture.",
+          "reason": "Send idempotent requests and use signed events to reconcile ambiguous outcomes.",
+          "tradeoff": "A timeout can occur after a successful charge. Reconcile the existing intent before retrying with a different key."
         }
       ]
     },
@@ -944,19 +1588,31 @@
           "steps": [
             {
               "name": "Admin API",
-              "detail": "Validates and versions the edit"
+              "detail": "Validates and versions the edit",
+              "stackIds": [
+                "config"
+              ]
             },
             {
               "name": "Metadata store",
-              "detail": "Commits rules and an outbox event"
+              "detail": "Commits rules and an outbox event",
+              "stackIds": [
+                "config"
+              ]
             },
             {
               "name": "Compiler",
-              "detail": "Signs an environment snapshot"
+              "detail": "Signs an environment snapshot",
+              "stackIds": [
+                "snapshots"
+              ]
             },
             {
               "name": "Regional distributor",
-              "detail": "Offers the new version"
+              "detail": "Offers the new version",
+              "stackIds": [
+                "snapshots"
+              ]
             }
           ]
         },
@@ -965,21 +1621,53 @@
           "steps": [
             {
               "name": "Regional distributor",
-              "detail": "Sends a versioned snapshot"
+              "detail": "Sends a versioned snapshot",
+              "stackIds": [
+                "snapshots"
+              ]
             },
             {
               "name": "SDK cache",
-              "detail": "Verifies and applies it atomically"
+              "detail": "Verifies and applies it atomically",
+              "stackIds": [
+                "sdk"
+              ]
             },
             {
               "name": "SDK evaluator",
-              "detail": "Uses local rules and stable rollout buckets"
+              "detail": "Uses local rules and stable rollout buckets",
+              "stackIds": [
+                "sdk"
+              ]
             },
             {
               "name": "Application",
               "detail": "Receives the selected variant"
             }
           ]
+        }
+      ],
+      "stack": [
+        {
+          "id": "config",
+          "name": "PostgreSQL",
+          "role": "Versioned rules and audit.",
+          "reason": "Store flag rules and segment references with a transactional outbox for publication.",
+          "tradeoff": "The write path can briefly lag evaluation. Return the committed version and report propagation separately."
+        },
+        {
+          "id": "snapshots",
+          "name": "Amazon S3 + CloudFront",
+          "role": "Signed snapshot distribution.",
+          "reason": "Publish immutable signed rule snapshots, using a short-lived manifest to advertise the latest version.",
+          "tradeoff": "Caches and offline clients can miss a kill switch. Define a safe fallback and staleness budget."
+        },
+        {
+          "id": "sdk",
+          "name": "OpenFeature SDK + custom provider",
+          "role": "Local flag evaluation.",
+          "reason": "Expose a standard flag API and apply deterministic rollout rules against the SDK’s cached snapshot.",
+          "tradeoff": "The provider must implement and test consistent targeting, rollout hashing, and offline behavior in each supported runtime."
         }
       ]
     },
@@ -1013,19 +1701,33 @@
           "steps": [
             {
               "name": "Producer",
-              "detail": "Maps a key to a partition"
+              "detail": "Maps a key to a partition",
+              "stackIds": [
+                "rpc"
+              ]
             },
             {
               "name": "Partition leader",
-              "detail": "Appends the event"
+              "detail": "Appends the event",
+              "stackIds": [
+                "broker",
+                "media"
+              ]
             },
             {
               "name": "Replica quorum",
-              "detail": "Persists the log entry"
+              "detail": "Persists the log entry",
+              "stackIds": [
+                "broker",
+                "media"
+              ]
             },
             {
               "name": "Producer",
-              "detail": "Receives durable acknowledgement"
+              "detail": "Receives durable acknowledgement",
+              "stackIds": [
+                "rpc"
+              ]
             }
           ]
         },
@@ -1034,11 +1736,18 @@
           "steps": [
             {
               "name": "Consumer group",
-              "detail": "Finds its partition assignment"
+              "detail": "Finds its partition assignment",
+              "stackIds": [
+                "rpc"
+              ]
             },
             {
               "name": "Broker",
-              "detail": "Returns records from the next offset"
+              "detail": "Returns records from the next offset",
+              "stackIds": [
+                "broker",
+                "media"
+              ]
             },
             {
               "name": "Worker",
@@ -1046,9 +1755,35 @@
             },
             {
               "name": "Coordinator",
-              "detail": "Stores the committed next offset"
+              "detail": "Stores the committed next offset",
+              "stackIds": [
+                "rpc"
+              ]
             }
           ]
+        }
+      ],
+      "stack": [
+        {
+          "id": "broker",
+          "name": "Go + etcd/raft",
+          "role": "Partition leadership and replication.",
+          "reason": "Implement one replicated log per partition, with fenced terms and committed offsets.",
+          "tradeoff": "The library provides consensus primitives. The broker still needs group coordination, recovery, and disk durability rules."
+        },
+        {
+          "id": "media",
+          "name": "Append-only SSD segment files",
+          "role": "Write-ahead storage.",
+          "reason": "Batch disk flushes with fdatasync and acknowledge after the specified number of durable replica writes.",
+          "tradeoff": "Frequent flushes add latency. Larger batches improve throughput and increase time to acknowledge."
+        },
+        {
+          "id": "rpc",
+          "name": "gRPC + Protocol Buffers",
+          "role": "Producer and consumer API.",
+          "reason": "Define bounded batch publish, fetch, and offset commit requests with stable producer sequence IDs.",
+          "tradeoff": "RPC retries can replay a request. Preserve producer deduplication across failover."
         }
       ]
     },
@@ -1082,23 +1817,38 @@
           "steps": [
             {
               "name": "SDK",
-              "detail": "Emits spans with trace context"
+              "detail": "Emits spans with trace context",
+              "stackIds": [
+                "otel"
+              ]
             },
             {
               "name": "Collector",
-              "detail": "Batches and buffers spans"
+              "detail": "Batches and buffers spans",
+              "stackIds": [
+                "otel"
+              ]
             },
             {
               "name": "Partitioned stream",
-              "detail": "Groups spans by trace ID"
+              "detail": "Groups spans by trace ID",
+              "stackIds": [
+                "stream"
+              ]
             },
             {
               "name": "Tail sampler",
-              "detail": "Retains useful traces after a bounded wait"
+              "detail": "Retains useful traces after a bounded wait",
+              "stackIds": [
+                "sampling"
+              ]
             },
             {
               "name": "Storage and index",
-              "detail": "Persist chunks and searchable summaries"
+              "detail": "Persist chunks and searchable summaries",
+              "stackIds": [
+                "index"
+              ]
             }
           ]
         },
@@ -1111,13 +1861,46 @@
             },
             {
               "name": "Query API",
-              "detail": "Reads summaries or the trace manifest"
+              "detail": "Reads summaries or the trace manifest",
+              "stackIds": [
+                "index"
+              ]
             },
             {
               "name": "Trace viewer",
               "detail": "Assembles spans and marks missing parents"
             }
           ]
+        }
+      ],
+      "stack": [
+        {
+          "id": "otel",
+          "name": "OpenTelemetry SDK + Collector",
+          "role": "Trace propagation and ingest.",
+          "reason": "Create trace and span IDs, propagate context, and send OTLP batches through bounded collectors.",
+          "tradeoff": "Losing or dropping upstream spans limits completeness even when downstream sampling is correct."
+        },
+        {
+          "id": "stream",
+          "name": "Apache Kafka",
+          "role": "Trace input log.",
+          "reason": "Partition by tenant and trace ID so one assembly owner sees the relevant spans.",
+          "tradeoff": "A partition reset or replay can redeliver spans. Deduplicate using span identity."
+        },
+        {
+          "id": "sampling",
+          "name": "Apache Flink",
+          "role": "Stateful trace assembly.",
+          "reason": "Group spans by trace ID with a bounded sampling window and checkpoint the assembly state.",
+          "tradeoff": "Late spans can miss the window. Track incomplete traces and reclaim state predictably."
+        },
+        {
+          "id": "index",
+          "name": "Amazon S3 + Elasticsearch",
+          "role": "Trace payloads and searchable summaries.",
+          "reason": "Keep large span chunks in S3 and index tenant, service, duration, and error fields in Elasticsearch.",
+          "tradeoff": "Index and payload publication can lag each other. Validate references before returning results."
         }
       ]
     },
@@ -1155,15 +1938,25 @@
             },
             {
               "name": "Score store",
-              "detail": "Deduplicates and commits a player version"
+              "detail": "Deduplicates and commits a player version",
+              "stackIds": [
+                "scores"
+              ]
             },
             {
               "name": "View worker",
-              "detail": "Applies versioned updates"
+              "detail": "Applies versioned updates",
+              "stackIds": [
+                "scores",
+                "stream"
+              ]
             },
             {
               "name": "Ranked index",
-              "detail": "Publishes an ordered snapshot"
+              "detail": "Publishes an ordered snapshot",
+              "stackIds": [
+                "rank"
+              ]
             }
           ]
         },
@@ -1176,17 +1969,46 @@
             },
             {
               "name": "Query service",
-              "detail": "Reads a single index snapshot"
+              "detail": "Reads a single index snapshot",
+              "stackIds": [
+                "rank"
+              ]
             },
             {
               "name": "Ranked index",
-              "detail": "Provides counts and rank within each range"
+              "detail": "Provides counts and rank within each range",
+              "stackIds": [
+                "rank"
+              ]
             },
             {
               "name": "Player",
               "detail": "Receives rank and snapshot version"
             }
           ]
+        }
+      ],
+      "stack": [
+        {
+          "id": "scores",
+          "name": "Sharded MySQL (InnoDB)",
+          "role": "Authoritative score accounting.",
+          "reason": "Deduplicate accepted events and commit a player’s score, version, and outbox in one transaction.",
+          "tradeoff": "Sharding by player scales writes and makes exact global rank a separate computation."
+        },
+        {
+          "id": "stream",
+          "name": "Apache Kafka",
+          "role": "Score log.",
+          "reason": "Publish score changes keyed by player so the rank worker can replay the latest accepted versions.",
+          "tradeoff": "Consumer lag means the index can trail acceptance. Return the applied snapshot version."
+        },
+        {
+          "id": "rank",
+          "name": "Redis Sorted Sets",
+          "role": "Baseline rank view.",
+          "reason": "Use a seasonal sorted set, ZRANK, and range reads. Encode ascending player-ID tie order with an inverted numeric score and a fixed-width member ID.",
+          "tradeoff": "A seasonal set lives on one Redis shard. Use a transactional ordered index for sharded exact ranks or relax the exactness requirement."
         }
       ]
     },
@@ -1220,19 +2042,32 @@
           "steps": [
             {
               "name": "Worker",
-              "detail": "Requests ownership of a resource"
+              "detail": "Requests ownership of a resource",
+              "stackIds": [
+                "api"
+              ]
             },
             {
               "name": "Router",
-              "detail": "Selects the authoritative shard"
+              "detail": "Selects the authoritative shard",
+              "stackIds": [
+                "leases",
+                "api"
+              ]
             },
             {
               "name": "Replicated shard",
-              "detail": "Commits an exclusive grant"
+              "detail": "Commits an exclusive grant",
+              "stackIds": [
+                "leases"
+              ]
             },
             {
               "name": "Worker",
-              "detail": "Receives lease ID and fencing token"
+              "detail": "Receives lease ID and fencing token",
+              "stackIds": [
+                "api"
+              ]
             }
           ]
         },
@@ -1241,17 +2076,46 @@
           "steps": [
             {
               "name": "Worker",
-              "detail": "Sends a write with its token"
+              "detail": "Sends a write with its token",
+              "stackIds": [
+                "api"
+              ]
             },
             {
               "name": "Protected store",
-              "detail": "Atomically checks the token and applies eligible writes"
+              "detail": "Atomically checks the token and applies eligible writes",
+              "stackIds": [
+                "store"
+              ]
             },
             {
               "name": "Store response",
               "detail": "Accepts current writes and rejects older tokens"
             }
           ]
+        }
+      ],
+      "stack": [
+        {
+          "id": "leases",
+          "name": "etcd",
+          "role": "Consensus lease and grant storage.",
+          "reason": "Store each grant using an etcd transaction with a lease, a durable fencing generation, and revision watches.",
+          "tradeoff": "Sharding independent resources across clusters is application work. A hot resource must still serialize grants."
+        },
+        {
+          "id": "api",
+          "name": "Go + gRPC",
+          "role": "Lock coordinator API.",
+          "reason": "Implement acquire, renew, release, and watch around the authoritative shard for each resource.",
+          "tradeoff": "Clients need bounded retry and must stop protected work when lease renewal is uncertain."
+        },
+        {
+          "id": "store",
+          "name": "PostgreSQL",
+          "role": "Fencing-aware protected store.",
+          "reason": "Check and advance the highest token while applying a protected write in the same transaction.",
+          "tradeoff": "Downstream systems without an atomic token check cannot enforce stale-owner exclusion."
         }
       ]
     },
@@ -1289,7 +2153,10 @@
             },
             {
               "name": "Staging store",
-              "detail": "Receives artifact bytes"
+              "detail": "Receives artifact bytes",
+              "stackIds": [
+                "blob"
+              ]
             },
             {
               "name": "Validation worker",
@@ -1297,11 +2164,17 @@
             },
             {
               "name": "Artifact store",
-              "detail": "Persists immutable bytes"
+              "detail": "Persists immutable bytes",
+              "stackIds": [
+                "blob"
+              ]
             },
             {
               "name": "Registry DB",
-              "detail": "Commits version metadata"
+              "detail": "Commits version metadata",
+              "stackIds": [
+                "catalog"
+              ]
             }
           ]
         },
@@ -1314,17 +2187,46 @@
             },
             {
               "name": "Download service",
-              "detail": "Checks access"
+              "detail": "Checks access",
+              "stackIds": [
+                "catalog"
+              ]
             },
             {
               "name": "CDN",
-              "detail": "Fetches or serves immutable bytes"
+              "detail": "Fetches or serves immutable bytes",
+              "stackIds": [
+                "edge"
+              ]
             },
             {
               "name": "Client",
               "detail": "Verifies digest before install"
             }
           ]
+        }
+      ],
+      "stack": [
+        {
+          "id": "blob",
+          "name": "Amazon S3",
+          "role": "Staging and immutable artifact storage.",
+          "reason": "Upload to a staging key, verify the digest, and copy to a durable digest-addressed path before publication.",
+          "tradeoff": "Object durability and metadata commit are separate. Keep a grace period for orphan cleanup."
+        },
+        {
+          "id": "catalog",
+          "name": "PostgreSQL",
+          "role": "Package metadata and version constraints.",
+          "reason": "Use a unique namespace/name/version key and conditional tag updates, and commit an outbox entry with publication.",
+          "tradeoff": "Metadata can lag edge caches. Make quarantine checks explicit at download time."
+        },
+        {
+          "id": "edge",
+          "name": "Amazon CloudFront",
+          "role": "Artifact caching.",
+          "reason": "Cache immutable blobs at the edge and use short-lived signed access for private versions.",
+          "tradeoff": "Cache invalidation cannot recall artifacts already downloaded. Private reads still require authorization."
         }
       ]
     },
@@ -1358,19 +2260,31 @@
           "steps": [
             {
               "name": "Workload",
-              "detail": "Presents verified identity"
+              "detail": "Presents verified identity",
+              "stackIds": [
+                "id"
+              ]
             },
             {
               "name": "Policy service",
-              "detail": "Checks current authorization"
+              "detail": "Checks current authorization",
+              "stackIds": [
+                "id"
+              ]
             },
             {
               "name": "Secret store",
-              "detail": "Provides ciphertext and wrapped key"
+              "detail": "Provides ciphertext and wrapped key",
+              "stackIds": [
+                "ciphertexts"
+              ]
             },
             {
               "name": "Key service",
-              "detail": "Unwraps the data key"
+              "detail": "Unwraps the data key",
+              "stackIds": [
+                "keys"
+              ]
             },
             {
               "name": "Read service",
@@ -1391,13 +2305,39 @@
             },
             {
               "name": "Alias store",
-              "detail": "Switches current version"
+              "detail": "Switches current version",
+              "stackIds": [
+                "ciphertexts"
+              ]
             },
             {
               "name": "Target system",
               "detail": "Revokes the old credential after migration"
             }
           ]
+        }
+      ],
+      "stack": [
+        {
+          "id": "id",
+          "name": "SPIRE + Open Policy Agent",
+          "role": "Workload identity and authorization.",
+          "reason": "Use SPIRE to issue short-lived workload identities and OPA to evaluate versioned read policies.",
+          "tradeoff": "Policy bundles can lag. Fail closed once cached rules exceed the revocation budget."
+        },
+        {
+          "id": "ciphertexts",
+          "name": "Amazon DynamoDB",
+          "role": "Encrypted version records.",
+          "reason": "Keep tenant and version keyed ciphertext and wrapped keys. Use conditional writes for aliases.",
+          "tradeoff": "Transactions stay within a region. Global aliases or policies need explicit regional ownership and freshness contracts."
+        },
+        {
+          "id": "keys",
+          "name": "AWS KMS",
+          "role": "Envelope encryption key service.",
+          "reason": "Create and unwrap per-version data keys using a tenant and secret scoped encryption context.",
+          "tradeoff": "KMS availability and quotas affect reads. Ciphertext caches help storage load, but cached data keys still need authorization."
         }
       ]
     },
@@ -1435,15 +2375,26 @@
             },
             {
               "name": "Document store",
-              "detail": "Commits data and outbox event"
+              "detail": "Commits data and outbox event",
+              "stackIds": [
+                "origin",
+                "stream"
+              ]
             },
             {
               "name": "Analyzer",
-              "detail": "Tokenizes text and records positions"
+              "detail": "Tokenizes text and records positions",
+              "stackIds": [
+                "stream",
+                "index"
+              ]
             },
             {
               "name": "Index shards",
-              "detail": "Publish versioned search segments"
+              "detail": "Publish versioned search segments",
+              "stackIds": [
+                "index"
+              ]
             }
           ]
         },
@@ -1456,21 +2407,53 @@
             },
             {
               "name": "Coordinator",
-              "detail": "Queries the relevant shards"
+              "detail": "Queries the relevant shards",
+              "stackIds": [
+                "index"
+              ]
             },
             {
               "name": "Ranker",
-              "detail": "Merges candidate scores"
+              "detail": "Merges candidate scores",
+              "stackIds": [
+                "index"
+              ]
             },
             {
               "name": "Authorization gate",
-              "detail": "Checks current access"
+              "detail": "Checks current access",
+              "stackIds": [
+                "origin"
+              ]
             },
             {
               "name": "Response",
               "detail": "Returns eligible titles and snippets"
             }
           ]
+        }
+      ],
+      "stack": [
+        {
+          "id": "origin",
+          "name": "Amazon DynamoDB + Amazon S3",
+          "role": "Authoritative metadata and document bytes.",
+          "reason": "Use conditional versions and an outbox transaction for document metadata and ACL revisions, with immutable content in S3.",
+          "tradeoff": "Cross-region replicas can lag. Final disclosure needs an authoritative permission decision."
+        },
+        {
+          "id": "stream",
+          "name": "DynamoDB Streams + Apache Kafka",
+          "role": "Index change stream.",
+          "reason": "Relay outbox records into a replayable Kafka topic keyed by tenant and document ID.",
+          "tradeoff": "The relay can redeliver. The index projector must reject stale versions and preserve tombstones."
+        },
+        {
+          "id": "index",
+          "name": "Elasticsearch",
+          "role": "Inverted index and ranking.",
+          "reason": "Use language analyzers, term positions for phrases, BM25 ranking and point-in-time pagination.",
+          "tradeoff": "The index is eventually consistent. Check current ACLs before returning any protected text."
         }
       ]
     },
@@ -1508,15 +2491,24 @@
             },
             {
               "name": "Traffic steering",
-              "detail": "Finds a healthy nearby edge"
+              "detail": "Finds a healthy nearby edge",
+              "stackIds": [
+                "steering"
+              ]
             },
             {
               "name": "Edge cache",
-              "detail": "Serves a fresh hit or requests a fill"
+              "detail": "Serves a fresh hit or requests a fill",
+              "stackIds": [
+                "edge"
+              ]
             },
             {
               "name": "Regional shield",
-              "detail": "Coalesces identical misses"
+              "detail": "Coalesces identical misses",
+              "stackIds": [
+                "edge"
+              ]
             },
             {
               "name": "Origin",
@@ -1533,21 +2525,56 @@
             },
             {
               "name": "Control plane",
-              "detail": "Commits a new generation"
+              "detail": "Commits a new generation",
+              "stackIds": [
+                "control"
+              ]
             },
             {
               "name": "Distribution stream",
-              "detail": "Sends it to serving edges"
+              "detail": "Sends it to serving edges",
+              "stackIds": [
+                "control"
+              ]
             },
             {
               "name": "Edge cache",
-              "detail": "Invalidates older entries and checks in-flight fills"
+              "detail": "Invalidates older entries and checks in-flight fills",
+              "stackIds": [
+                "edge"
+              ]
             },
             {
               "name": "Purge status",
-              "detail": "Reports serving-edge acknowledgements"
+              "detail": "Reports serving-edge acknowledgements",
+              "stackIds": [
+                "control"
+              ]
             }
           ]
+        }
+      ],
+      "stack": [
+        {
+          "id": "steering",
+          "name": "GeoDNS",
+          "role": "Edge traffic steering.",
+          "reason": "Direct clients to an available edge region with latency and geographic routing records.",
+          "tradeoff": "Resolver caching slows failover. Expiring serving leases still need enforcement at the edge."
+        },
+        {
+          "id": "edge",
+          "name": "OpenResty (NGINX + Lua)",
+          "role": "Edge cache and origin shield.",
+          "reason": "Cache HTTP responses and coalesce cold fills. Use custom policy checks for purge generations, signed requests, and control lease expiry.",
+          "tradeoff": "Default cache directives alone do not enforce the purge guarantee. The edge code must reject stale generations and late in-flight fills."
+        },
+        {
+          "id": "control",
+          "name": "PostgreSQL + Apache Kafka",
+          "role": "Control plane and purge distribution.",
+          "reason": "Commit versioned purge state in PostgreSQL and relay it via Kafka to edge control agents.",
+          "tradeoff": "Replicated event delivery is asynchronous. Track which serving edges applied each generation."
         }
       ]
     },
@@ -1581,23 +2608,41 @@
           "steps": [
             {
               "name": "Query API",
-              "detail": "Authenticates and records the SQL request."
+              "detail": "Authenticates and records the SQL request.",
+              "stackIds": [
+                "jobs"
+              ]
             },
             {
               "name": "Admission controller",
-              "detail": "Queues work and allocates tenant capacity."
+              "detail": "Queues work and allocates tenant capacity.",
+              "stackIds": [
+                "jobs"
+              ]
             },
             {
               "name": "Coordinator and catalog",
-              "detail": "Pin input snapshots and plan stages."
+              "detail": "Pin input snapshots and plan stages.",
+              "stackIds": [
+                "sql",
+                "files"
+              ]
             },
             {
               "name": "Scan workers",
-              "detail": "Read file splits and apply filters."
+              "detail": "Read file splits and apply filters.",
+              "stackIds": [
+                "sql",
+                "files"
+              ]
             },
             {
               "name": "Exchange and final workers",
-              "detail": "Redistribute rows and combine results."
+              "detail": "Redistribute rows and combine results.",
+              "stackIds": [
+                "sql",
+                "files"
+              ]
             }
           ]
         },
@@ -1606,15 +2651,25 @@
           "steps": [
             {
               "name": "Final workers",
-              "detail": "Write result pages under an attempt ID."
+              "detail": "Write result pages under an attempt ID.",
+              "stackIds": [
+                "files"
+              ]
             },
             {
               "name": "Coordinator",
-              "detail": "Selects successful output and commits a manifest."
+              "detail": "Selects successful output and commits a manifest.",
+              "stackIds": [
+                "sql",
+                "jobs"
+              ]
             },
             {
               "name": "Results API",
-              "detail": "Checks current access and reads a page."
+              "detail": "Checks current access and reads a page.",
+              "stackIds": [
+                "jobs"
+              ]
             },
             {
               "name": "Client",
@@ -1631,13 +2686,43 @@
             },
             {
               "name": "Replacement worker",
-              "detail": "Reads the pinned snapshot or accepted exchange output."
+              "detail": "Reads the pinned snapshot or accepted exchange output.",
+              "stackIds": [
+                "sql"
+              ]
             },
             {
               "name": "Coordinator",
-              "detail": "Accepts one attempt and discards competing output."
+              "detail": "Accepts one attempt and discards competing output.",
+              "stackIds": [
+                "sql",
+                "jobs"
+              ]
             }
           ]
+        }
+      ],
+      "stack": [
+        {
+          "id": "sql",
+          "name": "Trino",
+          "role": "SQL planning and execution.",
+          "reason": "Use a Trino coordinator and workers for split planning, distributed joins, aggregation, and task retries with a durable exchange.",
+          "tradeoff": "Task retry has cost and feature tradeoffs. A service wrapper must track query jobs and resubmit safely after coordinator loss."
+        },
+        {
+          "id": "files",
+          "name": "Apache Iceberg + Amazon S3",
+          "role": "Table snapshots, exchange, and result bytes.",
+          "reason": "Pin Iceberg snapshots for input tables. Keep columnar data, durable exchange files, and final result pages in S3.",
+          "tradeoff": "Table snapshots are per table unless the catalog provides a shared commit boundary. Durable exchange adds storage requests."
+        },
+        {
+          "id": "jobs",
+          "name": "PostgreSQL",
+          "role": "Query admission and result metadata.",
+          "reason": "Store query IDs, idempotency keys, coordinator ownership, and final result manifests in a transactional database.",
+          "tradeoff": "Store small metadata here and keep large result pages in S3. Publish only one manifest per successful run."
         }
       ]
     },
@@ -1671,7 +2756,10 @@
           "steps": [
             {
               "name": "Experiment registry",
-              "detail": "Freezes eligibility, arm weights, metric, and window."
+              "detail": "Freezes eligibility, arm weights, metric, and window.",
+              "stackIds": [
+                "registry"
+              ]
             },
             {
               "name": "Product client and assignment service",
@@ -1683,7 +2771,10 @@
             },
             {
               "name": "Durable stream and raw store",
-              "detail": "Buffer ingestion and retain events for replay."
+              "detail": "Buffer ingestion and retain events for replay.",
+              "stackIds": [
+                "events"
+              ]
             }
           ]
         },
@@ -1692,15 +2783,24 @@
           "steps": [
             {
               "name": "Stream join",
-              "detail": "Deduplicates events and attributes outcomes within each user’s window."
+              "detail": "Deduplicates events and attributes outcomes within each user’s window.",
+              "stackIds": [
+                "compute"
+              ]
             },
             {
               "name": "Metric aggregator",
-              "detail": "Counts enrolled and converted users by arm."
+              "detail": "Counts enrolled and converted users by arm.",
+              "stackIds": [
+                "compute"
+              ]
             },
             {
               "name": "Data quality checks",
-              "detail": "Flag unexpected assignment ratios and missing data."
+              "detail": "Flag unexpected assignment ratios and missing data.",
+              "stackIds": [
+                "compute"
+              ]
             },
             {
               "name": "Dashboard",
@@ -1717,13 +2817,42 @@
             },
             {
               "name": "Batch recompute",
-              "detail": "Reconciles deduplicated raw snapshots under frozen definitions."
+              "detail": "Reconciles deduplicated raw snapshots under frozen definitions.",
+              "stackIds": [
+                "compute"
+              ]
             },
             {
               "name": "Results store",
-              "detail": "Publishes an immutable report revision with uncertainty."
+              "detail": "Publishes an immutable report revision with uncertainty.",
+              "stackIds": [
+                "registry"
+              ]
             }
           ]
+        }
+      ],
+      "stack": [
+        {
+          "id": "registry",
+          "name": "PostgreSQL",
+          "role": "Experiment versions and report metadata.",
+          "reason": "Freeze the assignment and metric definitions, and publish immutable report revisions with provenance.",
+          "tradeoff": "Configuration must be versioned and kept alongside archived inputs."
+        },
+        {
+          "id": "events",
+          "name": "Apache Kafka + Amazon S3",
+          "role": "Durable intake and replay.",
+          "reason": "Buffer tagged events with Kafka and store immutable raw batches in S3 for batch reconciliation.",
+          "tradeoff": "Replayed or delayed events can bias counts unless joined within event-time windows and deduplicated."
+        },
+        {
+          "id": "compute",
+          "name": "Apache Flink + Apache Spark",
+          "role": "Provisional and final analysis.",
+          "reason": "Join assignment and outcome streams with Flink, then recompute frozen inputs with Spark at finalization.",
+          "tradeoff": "Maintaining two computation paths adds cost. Share metric definitions and reconcile provisional counts with batch results."
         }
       ]
     },
@@ -1761,15 +2890,24 @@
             },
             {
               "name": "Listing store and outbox",
-              "detail": "Commit the new record and its change event together."
+              "detail": "Commit the new record and its change event together.",
+              "stackIds": [
+                "listings"
+              ]
             },
             {
               "name": "Index projector",
-              "detail": "Applies versioned updates and old-shard tombstones."
+              "detail": "Applies versioned updates and old-shard tombstones.",
+              "stackIds": [
+                "changes"
+              ]
             },
             {
               "name": "Regional search shards",
-              "detail": "Make updated data visible to search."
+              "detail": "Make updated data visible to search.",
+              "stackIds": [
+                "search"
+              ]
             }
           ]
         },
@@ -1778,19 +2916,32 @@
           "steps": [
             {
               "name": "Search API",
-              "detail": "Validates coordinates, radius, query, and page size."
+              "detail": "Validates coordinates, radius, query, and page size.",
+              "stackIds": [
+                "service"
+              ]
             },
             {
               "name": "Spatial router",
-              "detail": "Covers the circle and selects every relevant shard."
+              "detail": "Covers the circle and selects every relevant shard.",
+              "stackIds": [
+                "service"
+              ]
             },
             {
               "name": "Search shards",
-              "detail": "Match terms, verify distance and hours, and rank candidates."
+              "detail": "Match terms, verify distance and hours, and rank candidates.",
+              "stackIds": [
+                "search"
+              ]
             },
             {
               "name": "Results coordinator",
-              "detail": "Merges scores, checks versions, and returns a page."
+              "detail": "Merges scores, checks versions, and returns a page.",
+              "stackIds": [
+                "service",
+                "listings"
+              ]
             }
           ]
         },
@@ -1799,7 +2950,10 @@
           "steps": [
             {
               "name": "Coordinator",
-              "detail": "Retries a timed-out shard on a replica."
+              "detail": "Retries a timed-out shard on a replica.",
+              "stackIds": [
+                "service"
+              ]
             },
             {
               "name": "Deadline check",
@@ -1810,6 +2964,36 @@
               "detail": "Marks partial coverage or reports an error when a shard is unavailable."
             }
           ]
+        }
+      ],
+      "stack": [
+        {
+          "id": "service",
+          "name": "Go + H3",
+          "role": "Search API, routing, and result merge.",
+          "reason": "Use a Go coordinator to cover the search circle with intersecting H3 cells, select all relevant regions, and merge results.",
+          "tradeoff": "A cover based on cell centers can miss edge matches. Use a conservative cover and independent distance verification."
+        },
+        {
+          "id": "listings",
+          "name": "MySQL (InnoDB)",
+          "role": "Authoritative listings and outbox.",
+          "reason": "Commit a listing revision and its index event together. Use expected versions to reject stale edits.",
+          "tradeoff": "Authoritative writes are visible before the search projection catches up. Store and serve version information."
+        },
+        {
+          "id": "changes",
+          "name": "Debezium + Apache Kafka",
+          "role": "Listing update delivery.",
+          "reason": "Read MySQL outbox changes from the binlog and publish by listing ID for a replayable indexing path.",
+          "tradeoff": "Retries can redeliver records. Use listing versions to apply old-shard tombstones and repeat updates safely."
+        },
+        {
+          "id": "search",
+          "name": "Elasticsearch",
+          "role": "Text and geographic filtering.",
+          "reason": "Index text, categories, and geo_point coordinates. Apply a geo_distance filter before ranking candidates.",
+          "tradeoff": "Search refresh and shard moves create a window of staleness. Deduplicate and check versions before returning results."
         }
       ]
     }

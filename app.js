@@ -108,16 +108,34 @@ function renderTopic(){
   document.querySelectorAll('[data-task="coding"]').forEach(button=>setTaskButton(button,completedTypes().includes('coding')));
 }
 function renderSystemLibrary(){const items=content.systems;document.querySelector('#systemLibrary').innerHTML=items.map(item=>`<button class="system-library-item ${item.id===(selectedSystemId||dailyContent().system.id)?'selected':''}" data-system-id="${escapeHtml(item.id)}"><span>${escapeHtml(item.topic)}</span><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.tag||'System design')}</small></button>`).join('');}
-function renderArchitectureBoard(flows){
+function renderTechnologyStack(stack){
+  if(!stack.length)return '';
+  return `<section class="technology-stack" aria-labelledby="technology-stack-title">
+    <h3 id="technology-stack-title">Example technology stack</h3>
+    <table>
+      <thead><tr><th scope="col">Technology</th><th scope="col">Role and reason</th><th scope="col">Tradeoff</th></tr></thead>
+      <tbody>${stack.map(technology=>`<tr>
+        <th scope="row">${escapeHtml(technology.name)}</th>
+        <td><strong>${escapeHtml(technology.role)}</strong> ${escapeHtml(technology.reason)}</td>
+        <td>${escapeHtml(technology.tradeoff)}</td>
+      </tr>`).join('')}</tbody>
+    </table>
+  </section>`;
+}
+
+function renderArchitectureBoard(flows,stack=[]){
   if(!flows?.length)return '';
+  const technologyNames=new Map(stack.map(technology=>[technology.id,technology.name]));
   return `<section class="architecture-board" aria-label="Architecture board">
     <h3>Architecture board</h3>
     ${flows.map(flow=>`
       <section class="board-flow">
         <h4>${escapeHtml(flow.title)}</h4>
-        <ol>${flow.steps.map(step=>`
-          <li><strong>${escapeHtml(step.name)}</strong><span>${escapeHtml(step.detail)}</span></li>
-        `).join('')}</ol>
+        <ol>${flow.steps.map(step=>{
+          const names=(step.stackIds||[]).map(id=>technologyNames.get(id)).filter(Boolean);
+          const technologies=names.length?`<span class="board-technology">${escapeHtml(names.join(' · '))}</span>`:'';
+          return `<li><strong>${escapeHtml(step.name)}</strong>${technologies}<span>${escapeHtml(step.detail)}</span></li>`;
+        }).join('')}</ol>
       </section>
     `).join('')}
   </section>`;
@@ -126,7 +144,13 @@ function renderArchitectureBoard(flows){
 function renderSystems(){
   const item=content.systems.find(system=>system.id===selectedSystemId)||dailyContent().system;setText('#systemTopic',item.topic.toUpperCase());setText('#systemTitle',item.title);setText('#systemScenario',item.scenario);
   document.querySelector('#systemGuide').innerHTML=item.guide.map(point=>`<li>${escapeHtml(point)}</li>`).join('');
-  const solution=content.systemSolutions[item.id];document.querySelector('#systemSolution').innerHTML=`<p class="solution-intro">${escapeHtml(solution.intro)}</p>${renderArchitectureBoard(solution.board)}${solution.sections.map((section,index)=>`<section class="solution-section"><span>0${index+1}</span><div><h3>${escapeHtml(section.title)}</h3><p>${escapeHtml(section.body)}</p></div></section>`).join('')}`;
+  const solution=content.systemSolutions[item.id];
+  const stack=solution.stack||[];
+  document.querySelector('#systemSolution').innerHTML=`
+    <p class="solution-intro">${escapeHtml(solution.intro)}</p>
+    ${renderArchitectureBoard(solution.board,stack)}
+    ${renderTechnologyStack(stack)}
+    ${solution.sections.map((section,index)=>`<section class="solution-section"><span>0${index+1}</span><div><h3>${escapeHtml(section.title)}</h3><p>${escapeHtml(section.body)}</p></div></section>`).join('')}`;
   const solutionButton=document.querySelector('#toggleSystemSolution');
   const solutionPanel=document.querySelector('#systemSolution');
   solutionButton.textContent='Show a strong example design';

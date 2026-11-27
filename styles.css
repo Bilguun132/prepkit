@@ -92,6 +92,29 @@
 }
 .board-flow li strong { color: #264b3d; font-size: 12px; }
 .board-flow li span { margin-top: 4px; color: #516059; font-size: 11px; line-height: 1.45; }
+.board-flow li .board-technology { color: #214f3d; font-weight: 700; }
+.technology-stack {
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: white;
+}
+.technology-stack h3 { font: 700 15px Manrope, sans-serif; margin: 0 0 8px; }
+.technology-stack table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.technology-stack th, .technology-stack td {
+  text-align: left;
+  vertical-align: top;
+  padding: 8px 9px;
+  border-bottom: 1px solid var(--line);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.technology-stack thead th { color: #385b4c; background: #f3f7f5; }
+.technology-stack tbody th { width: 22%; color: #264b3d; }
+.technology-stack td { color: #505e57; }
+.technology-stack td strong { display: block; color: #18221f; }
+.technology-stack tbody tr:last-child > * { border-bottom: 0; }
 .trend-status { color: #506359; font-size: 12px; margin: 0 0 14px; }
 .trend-sources { margin: 0; padding-left: 18px; }
 .trend-sources li + li { margin-top: 9px; }
@@ -100,6 +123,8 @@
 .trend-history details + details { margin-top: 9px; }
 .trend-history:empty { display: none; }
 @media (max-width: 650px) {
+  .technology-stack { padding: 10px; }
+  .technology-stack th, .technology-stack td { padding: 6px; }
   .board-flow ol { flex-direction: column; gap: 20px; }
   .board-flow li { flex: auto; }
   .board-flow li + li::before { content: '↓'; top: -20px; left: 14px; }
