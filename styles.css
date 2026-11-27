@@ -93,6 +93,44 @@
 .board-flow li strong { color: #264b3d; font-size: 12px; }
 .board-flow li span { margin-top: 4px; color: #516059; font-size: 11px; line-height: 1.45; }
 .board-flow li .board-technology { color: #214f3d; font-weight: 700; }
+.interview-prep, .design-answer-block, .design-reference {
+  margin-bottom: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: white;
+}
+.interview-prep summary, .system-guide summary, .design-reference summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: #214e40;
+}
+.interview-prep p, .design-answer-block p, .design-detail p {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #505e57;
+}
+.interview-prep p { margin: 10px 0 0; }
+.interview-phases { margin: 12px 0; padding-left: 20px; }
+.interview-phases li { margin-bottom: 8px; }
+.interview-phases span { display: block; color: #505e57; font-size: 12px; line-height: 1.55; }
+.interview-sources { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.interview-sources a { color: var(--green); font-size: 11px; }
+.design-answer-block h3, .design-detail h4 { font: 700 15px Manrope, sans-serif; margin: 0 0 8px; }
+.design-answer-block p { margin: 0; }
+.design-scope { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 0; }
+.design-scope div { padding: 8px 9px; background: #f3f7f5; border-radius: 6px; }
+.design-scope dt { font-weight: 700; font-size: 12px; }
+.design-scope dd { margin: 4px 0 0; font-size: 12px; color: #505e57; line-height: 1.5; }
+.design-interfaces { margin: 10px 0 0; padding-left: 18px; }
+.design-interfaces li { margin-bottom: 6px; line-height: 1.5; color: #505e57; font-size: 12px; }
+.design-interfaces code { color: #214e40; overflow-wrap: anywhere; margin-right: 7px; }
+.design-answer-block .architecture-board { margin: 10px 0 0; padding: 12px; }
+.design-dive { margin-top: 10px; }
+.design-dive h4 { margin: 0 0 3px; font-size: 13px; }
+.design-answer-block .design-verification { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 10px; }
+.design-reference[open] summary { margin-bottom: 12px; }
+.design-detail + .design-detail { padding-top: 10px; border-top: 1px solid var(--line); }
 .technology-stack {
   margin-bottom: 16px;
   padding: 14px 16px;
@@ -100,7 +138,6 @@
   border-radius: 10px;
   background: white;
 }
-.technology-stack h3 { font: 700 15px Manrope, sans-serif; margin: 0 0 8px; }
 .technology-stack table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .technology-stack th, .technology-stack td {
   text-align: left;
@@ -123,6 +160,7 @@
 .trend-history details + details { margin-top: 9px; }
 .trend-history:empty { display: none; }
 @media (max-width: 650px) {
+  .design-scope { grid-template-columns: 1fr; }
   .technology-stack { padding: 10px; }
   .technology-stack th, .technology-stack td { padding: 6px; }
   .board-flow ol { flex-direction: column; gap: 20px; }

@@ -41,7 +41,59 @@
 
       <section class="view hidden" id="view-topics"><div class="view-heading"><div><div class="eyebrow muted">ALGORITHM CURRICULUM</div><h1>Topic library</h1><p class="subtitle">Browse the full set of topics and pick what you want to study next.</p></div><span class="duration" id="topicLibraryCount"></span></div><div id="topicLibraryGrid" class="topic-library-grid"></div></section>
 
-      <section class="view hidden" id="view-systems"><div class="view-heading"><div><div class="eyebrow muted">DISTRIBUTED SYSTEMS · <span id="systemTopic"></span></div><h1 id="systemTitle"></h1><p class="subtitle">Practice clarifying requirements, designing the components, and explaining tradeoffs.</p></div><span class="duration">20 MIN</span></div><section class="system-library-wrap"><div class="section-heading"><div><div class="eyebrow muted">DESIGN PRACTICE LIBRARY</div><h2>Choose a system to design</h2></div></div><div id="systemLibrary" class="system-library"></div></section><article class="system-workspace"><div class="system-scenario"><div class="box-label">THE SCENARIO</div><p id="systemScenario"></p></div><div class="system-guide"><div class="guide-head"><div><div class="box-label">DISCUSSION GUIDE</div><h2>Work through it in order</h2></div><button class="reveal-button" data-reveal="systemGuide">Show guide <span>＋</span></button></div><ol class="guide-list hidden" id="systemGuide"></ol></div><div class="system-solution-wrap"><button id="toggleSystemSolution" class="secondary-button" aria-expanded="false" aria-controls="systemSolution">Show a strong example design</button><div id="systemSolution" class="system-solution hidden"></div></div><div class="notes-wrap"><label for="designNotes">Your design notes</label><textarea id="designNotes" placeholder="Requirements, API, data model, components, bottlenecks, tradeoffs…"></textarea><span>Notes save in this browser as you type.</span></div></article><button class="complete-button section-complete" data-task="systems"><span class="check-circle">✓</span><span>Mark system design complete</span><span class="button-arrow">→</span></button></section>
+      <section class="view hidden" id="view-systems">
+        <div class="view-heading">
+          <div>
+            <div class="eyebrow muted">DISTRIBUTED SYSTEMS · <span id="systemTopic"></span></div>
+            <h1 id="systemTitle"></h1>
+            <p class="subtitle">Explain a working design, then defend the choices that matter.</p>
+          </div>
+        </div>
+        <details class="interview-prep">
+          <summary>How to prepare and structure your answer</summary>
+          <p>Use this pacing as a starting point for a 45-minute mock. Confirm the format with your recruiter and adjust when the interviewer steers the discussion.</p>
+          <ol class="interview-phases">
+            <li><strong>Scope the problem · 5 min</strong><span>Ask questions that would change the design. Agree on a few user actions, the most important guarantees, and what you’ll leave out.</span></li>
+            <li><strong>Name the data and interfaces · 5 min</strong><span>List the main records and the calls or events that move them. Show only the fields that matter for the decision.</span></li>
+            <li><strong>Draw a working baseline · 15 min</strong><span>Follow one request from input to response. Show where state is written, where the next read goes, and what the caller sees. Estimate load or storage when that number changes a decision.</span></li>
+            <li><strong>Deep-dive on the hardest parts · 15 min</strong><span>Choose one or two risks. State the requirement, explain how the mechanism meets it, and compare the cost with a plausible alternative. Walk through what happens when it fails.</span></li>
+            <li><strong>Close and verify · 5 min</strong><span>Recap the main tradeoff and say what load or failure test would confirm your design. For senior practice, name the likely first bottleneck or the assumption you most want to test.</span></li>
+          </ol>
+          <p><strong>When to name a technology.</strong> Name a product, protocol, or algorithm when its behavior matters. For example, “Elasticsearch supports text and radius filters in the same query, and the search index can lag the database.” Leave implementation languages and frameworks for questions about their specific constraints.</p>
+          <p><strong>How to practice.</strong> Read the prompt, sketch your design, and explain it aloud before revealing the example. For a shorter session, rehearse the request flow and one deep dive. Check whether your design covers the user actions, identifies what owns the data, and explains what happens on failure. Try again with one changed constraint or a peer asking follow-up questions.</p>
+          <p class="interview-sources">
+            <a href="https://www.hellointerview.com/learn/system-design/in-a-hurry/delivery" target="_blank" rel="noreferrer">Hello Interview · Delivery framework</a>
+            <a href="https://www.hellointerview.com/learn/system-design/in-a-hurry/how-to-prepare" target="_blank" rel="noreferrer">Hello Interview · How to prepare</a>
+            <a href="https://www.hellointerview.com/learn/system-design/in-a-hurry/key-technologies" target="_blank" rel="noreferrer">Hello Interview · Key technologies</a>
+            <a href="https://www.hellointerview.com/blog/the-system-design-interview-what-is-expected-at-each-level" target="_blank" rel="noreferrer">Hello Interview · Expectations by level</a>
+            <a href="https://amazon.jobs/content/en-gb/how-we-hire/sde-iii-interview-prep" target="_blank" rel="noreferrer">Amazon · Senior interview prep</a>
+            <a href="https://careers.microsoft.com/v2/global/en/hiring-tips/technical-interviewing.html" target="_blank" rel="noreferrer">Microsoft · Technical interviews</a>
+          </p>
+        </details>
+        <section class="system-library-wrap">
+          <div class="section-heading"><h2>Choose a system to design</h2></div>
+          <div id="systemLibrary" class="system-library"></div>
+        </section>
+        <article class="system-workspace">
+          <div class="system-scenario"><div class="box-label">THE SCENARIO</div><p id="systemScenario"></p></div>
+          <div class="system-guide">
+            <details>
+              <summary>Case prompts and hints</summary>
+              <ol class="guide-list" id="systemGuide"></ol>
+            </details>
+          </div>
+          <div class="notes-wrap">
+            <label for="designNotes">Your design notes</label>
+            <textarea id="designNotes" placeholder="Scope, data and interfaces, request flow, failure case, tradeoff…"></textarea>
+            <span>Notes save in this browser as you type.</span>
+          </div>
+          <div class="system-solution-wrap">
+            <button id="toggleSystemSolution" class="secondary-button" aria-expanded="false" aria-controls="systemSolution">Show a strong example design</button>
+            <div id="systemSolution" class="system-solution hidden"></div>
+          </div>
+        </article>
+        <button class="complete-button section-complete" data-task="systems"><span class="check-circle">✓</span><span>Mark system design complete</span><span class="button-arrow">→</span></button>
+      </section>
 
       <section class="view hidden" id="view-trends"><div class="view-heading"><div><div class="eyebrow muted">ENGINEERING TRENDS</div><h1 id="trendTitle"></h1><p class="subtitle" id="trendIntro"></p></div></div><p class="trend-status" id="trendStatus"></p><div class="trend-detail-grid" id="trendPoints"></div><article class="reading-panel full-reading" id="trendReading"></article><section id="trendHistory" class="trend-history" aria-label="Past briefings"></section><button class="complete-button section-complete" data-task="trends"><span class="check-circle">✓</span><span>Mark engineering trends complete</span><span class="button-arrow">→</span></button></section>
 

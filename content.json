@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-11-27T23:12:19+08:00",
+  "lastUpdated": "2026-11-27T23:23:52+08:00",
   "systemSolutions": {
     "rate-limiter": {
       "intro": "A strong design makes the policy explicit, enforces it near the request path, and chooses a clear consistency tradeoff.",
@@ -56,9 +56,9 @@
       "stack": [
         {
           "id": "gateway",
-          "name": "Envoy + Go",
+          "name": "Envoy external rate limiting",
           "role": "Request admission.",
-          "reason": "Envoy calls a Go rate limit service before forwarding protected requests.",
+          "reason": "Envoy asks a dedicated rate limit service for an admission decision before forwarding protected requests.",
           "tradeoff": "The extra RPC needs a short timeout and an explicit failure policy."
         },
         {
@@ -66,9 +66,38 @@
           "name": "Redis Cluster",
           "role": "Token bucket state.",
           "reason": "A Lua script refills and consumes the tokens in one operation on the shard that owns the key.",
-          "tradeoff": "A hot key can saturate one shard. Asynchronous replica failover can lose recent counts, so use a stronger store if the quota must be exact through failover."
+          "tradeoff": "A hot key can saturate one shard. Asynchronous replica failover can lose recent counts, so use a stronger store if the quota must be exact through failover.",
+          "highlight": true
         }
-      ]
+      ],
+      "interviewAnswer": {
+        "scope": "Apply a quota per caller and API policy and return a retry hint when a request is rejected.",
+        "constraints": "Handle 1M requests/s across regions. Confirm whether quota accuracy or availability is more important during failover.",
+        "outOfScope": "Billing-grade usage metering.",
+        "entities": "Rate policy, bucket key, available tokens, and last refill time.",
+        "interfaces": [
+          {
+            "call": "check(caller, route, cost)",
+            "purpose": "Return allow or deny plus a retry delay."
+          },
+          {
+            "call": "PUT /policies/{id}",
+            "purpose": "Set rate and burst capacity."
+          }
+        ],
+        "baseline": "The gateway derives the caller’s bucket key. The limiter refills and consumes tokens in one operation, then the gateway forwards the request or returns 429.",
+        "deepDives": [
+          {
+            "question": "How do concurrent requests share one bucket?",
+            "response": "Use one atomic update of balance and timestamp. A read followed by a separate write can spend the same token twice."
+          },
+          {
+            "question": "What changes when the quota is global?",
+            "response": "Route each key to one authoritative region for a strict quota. Local budgets avoid a cross-region hop but must bound overshoot and take replica failover into account."
+          }
+        ],
+        "verify": "Load-test a single hot caller and simulate loss of its owning region."
+      }
     },
     "url-shortener": {
       "intro": "Separate the write path that creates short codes from the latency-sensitive redirect path.",
@@ -158,7 +187,8 @@
           "name": "Amazon DynamoDB",
           "role": "Short code lookup.",
           "reason": "Use the code as the partition key and a conditional put to reject collisions.",
-          "tradeoff": "Fixed key lookups work well, but owner listings need a separate index and global replicas can lag."
+          "tradeoff": "Fixed key lookups work well, but owner listings need a separate index and global replicas can lag.",
+          "highlight": true
         },
         {
           "id": "edge",
@@ -174,7 +204,35 @@
           "reason": "Publish cache-hit access logs from the edge to an asynchronous analytics pipeline.",
           "tradeoff": "Analytics are eventually available and need deduplication."
         }
-      ]
+      ],
+      "interviewAnswer": {
+        "scope": "Create short links and redirect from a code. Confirm expiry and deletion behavior.",
+        "constraints": "Accept 100M new links/month and keep popular redirects fast globally. Uniqueness must hold on create.",
+        "outOfScope": "A full click analytics dashboard.",
+        "entities": "Link with code, destination, owner and expiry. Click events are separate from link records.",
+        "interfaces": [
+          {
+            "call": "POST /links",
+            "purpose": "Create and return a short code."
+          },
+          {
+            "call": "GET /{code}",
+            "purpose": "Return a redirect or a missing/expired response."
+          }
+        ],
+        "baseline": "Create uses a conditional insert on the code. Redirect reads the cache, then looks up the code in the key-value store and applies expiry. Emit analytics asynchronously.",
+        "deepDives": [
+          {
+            "question": "How do you handle code collisions?",
+            "response": "Use random codes with a conditional insert and retry. Size the code space for cumulative links and monitor collisions."
+          },
+          {
+            "question": "What happens to a deleted viral link?",
+            "response": "Short TTLs bound ordinary staleness. Use invalidation for urgent removal and choose a temporary redirect if the mapping may change."
+          }
+        ],
+        "verify": "Test a burst on one code, then delete it and measure how long edge redirects persist."
+      }
     },
     "notification-service": {
       "intro": "Model delivery as a durable workflow with per-channel queues, idempotency, and explicit provider feedback.",
@@ -250,7 +308,8 @@
           "name": "Amazon SQS",
           "role": "Channel queues.",
           "reason": "Separate email, SMS, and push queues with independent worker limits and dead-letter queues.",
-          "tradeoff": "Standard queues can deliver a message more than once or out of order."
+          "tradeoff": "Standard queues can deliver a message more than once or out of order.",
+          "highlight": true
         },
         {
           "id": "providers",
@@ -259,7 +318,35 @@
           "reason": "Route email, SMS, and push to separate providers and persist each attempt.",
           "tradeoff": "Provider rate limits and delivery acknowledgement semantics differ by channel."
         }
-      ]
+      ],
+      "interviewAnswer": {
+        "scope": "Accept notifications, respect user preferences, and deliver via email, push, or SMS with status.",
+        "constraints": "Support 50M users. Clarify acceptable delay by priority and whether duplicate sends are tolerable.",
+        "outOfScope": "Template editing and campaign analytics.",
+        "entities": "Notification request, preference, per-channel delivery and delivery attempt.",
+        "interfaces": [
+          {
+            "call": "POST /notifications",
+            "purpose": "Accept an idempotent request for asynchronous delivery."
+          },
+          {
+            "call": "GET /notifications/{id}",
+            "purpose": "Report per-channel status."
+          }
+        ],
+        "baseline": "Persist the request and dispatch record together. Route jobs to channel queues, then have bounded workers call providers and record attempts.",
+        "deepDives": [
+          {
+            "question": "How do you isolate a provider outage?",
+            "response": "Give each provider independent concurrency limits, retry budgets, queues, and a dead-letter path. Track queue age by channel."
+          },
+          {
+            "question": "What does a timeout mean?",
+            "response": "Treat the outcome as unknown. Reuse a provider idempotency key where supported and reconcile provider feedback before sending again when feasible."
+          }
+        ],
+        "verify": "Simulate a provider returning 429 and verify other channels keep serving their latency targets."
+      }
     },
     "news-feed": {
       "intro": "Choose a feed strategy based on the balance between write amplification and read latency, then make ranking and freshness explicit.",
@@ -346,16 +433,46 @@
           "name": "Apache Kafka",
           "role": "Publish and fanout stream.",
           "reason": "Consumers can replay publication events and retry inbox writes after outages.",
-          "tradeoff": "Replays can deliver an event twice. Key each inbox entry by user and post to make inserts idempotent."
+          "tradeoff": "Replays can deliver an event twice. Key each inbox entry by user and post to make inserts idempotent.",
+          "highlight": true
         },
         {
           "id": "inbox",
           "name": "Amazon DynamoDB",
           "role": "Per-user inbox.",
           "reason": "Partition by reader and query the most recent entries by a timestamp and post ID sort key.",
-          "tradeoff": "Large accounts create write amplification. Merge their posts at read time instead of copying them to every inbox."
+          "tradeoff": "Large accounts create write amplification. Merge their posts at read time instead of copying them to every inbox.",
+          "highlight": true
         }
-      ]
+      ],
+      "interviewAnswer": {
+        "scope": "Publish a post and read a ranked, paged home feed based on follows.",
+        "constraints": "Support 100M users with fast reads. Agree on acceptable feed lag and visibility rules.",
+        "outOfScope": "Ads and training a ranking model.",
+        "entities": "Post, follow edge, inbox entry and feed page cursor.",
+        "interfaces": [
+          {
+            "call": "POST /posts",
+            "purpose": "Persist a post and request feed propagation."
+          },
+          {
+            "call": "GET /feed",
+            "purpose": "Return ranked posts and a continuation cursor."
+          }
+        ],
+        "baseline": "Persist posts and fan out ordinary authors to reader inboxes. Hydrate those candidates at read time and merge recent posts from high fanout authors.",
+        "deepDives": [
+          {
+            "question": "Why use hybrid fanout?",
+            "response": "Precomputed inboxes keep reads fast, but a celebrity post can create millions of writes. Merge high fanout authors at read time and measure the extra read cost."
+          },
+          {
+            "question": "How do you handle privacy changes and repeat pages?",
+            "response": "Recheck visibility before returning hydrated posts. Use a ranking snapshot or stable sort key and tie-breaker so a cursor has defined semantics."
+          }
+        ],
+        "verify": "Replay a fanout event, simulate a celebrity post, and verify inbox deduplication and freshness."
+      }
     },
     "file-storage": {
       "intro": "Keep file bytes in durable object storage and metadata in a transactional service, connected by a versioned sync protocol.",
@@ -419,16 +536,50 @@
           "name": "Amazon S3",
           "role": "Durable file chunks.",
           "reason": "Upload directly with multipart sessions and verify checksums before publishing a manifest.",
-          "tradeoff": "An uploaded object and a database commit are separate operations. Expire unattached uploads and reconcile gaps."
+          "tradeoff": "An uploaded object and a database commit are separate operations. Expire unattached uploads and reconcile gaps.",
+          "highlight": true
         },
         {
           "id": "metadata",
           "name": "MySQL (InnoDB)",
           "role": "Metadata and version changes.",
           "reason": "Commit the current file version, part manifest, and change record in one transaction.",
-          "tradeoff": "An ordering scheme for sync cursors must handle concurrent commits. Segment the feed by account to contain contention."
+          "tradeoff": "An ordering scheme for sync cursors must handle concurrent commits. Segment the feed by account to contain contention.",
+          "highlight": true
         }
-      ]
+      ],
+      "interviewAnswer": {
+        "scope": "Upload and version large files, sync changes across devices, and authorize shared reads.",
+        "constraints": "Resume interrupted uploads and never publish a version with missing chunks. Agree on offline conflicts.",
+        "outOfScope": "Collaborative editing of file contents.",
+        "entities": "File, immutable version, chunk manifest, share grant and sync cursor.",
+        "interfaces": [
+          {
+            "call": "POST /uploads",
+            "purpose": "Start a resumable upload."
+          },
+          {
+            "call": "POST /uploads/{id}/complete",
+            "purpose": "Publish a verified file version."
+          },
+          {
+            "call": "GET /changes",
+            "purpose": "Return changes after an account cursor."
+          }
+        ],
+        "baseline": "The client sends chunks directly to object storage. The metadata service verifies the manifest, commits the new version and change event, then provides updates to syncing devices.",
+        "deepDives": [
+          {
+            "question": "Can a failed commit leave orphan chunks?",
+            "response": "Yes. Keep staged uploads until a grace period has passed and reconcile them against committed manifests. The client can safely retry completion."
+          },
+          {
+            "question": "How do two offline edits resolve?",
+            "response": "Compare expected versions. If an edit was based on stale data, retain an explicit conflict version or apply a file-type merge policy."
+          }
+        ],
+        "verify": "Interrupt an upload and complete it twice while another device edits the same file."
+      }
     },
     "metrics-platform": {
       "intro": "Build a high-throughput ingestion path, control cardinality, and optimize storage for time-range queries and retention.",
@@ -505,16 +656,46 @@
           "name": "Apache Kafka",
           "role": "Partitioned ingest log.",
           "reason": "Buffer compressed batches by tenant and series identity for replay and backpressure.",
-          "tradeoff": "Replay can duplicate points. Decide how the storage writer handles repeated samples."
+          "tradeoff": "Replay can duplicate points. Decide how the storage writer handles repeated samples.",
+          "highlight": true
         },
         {
           "id": "metrics",
           "name": "ClickHouse",
           "role": "Time range queries and rollups.",
           "reason": "Store compressed metric columns in MergeTree tables and materialize common time buckets.",
-          "tradeoff": "High label cardinality and excessive small inserts increase memory and merge costs."
+          "tradeoff": "High label cardinality and excessive small inserts increase memory and merge costs.",
+          "highlight": true
         }
-      ]
+      ],
+      "interviewAnswer": {
+        "scope": "Ingest time-series metrics, query recent or aggregated data, and evaluate alerts.",
+        "constraints": "Sustain millions of points/s. Clarify retention, labeling budgets, and alert freshness.",
+        "outOfScope": "Trace and log storage.",
+        "entities": "Series key, timestamped sample, rollup, alert rule and tenant quota.",
+        "interfaces": [
+          {
+            "call": "ExportMetrics(batch)",
+            "purpose": "Ingest labeled metric samples."
+          },
+          {
+            "call": "GET /metrics/query",
+            "purpose": "Read a time range at a requested resolution."
+          }
+        ],
+        "baseline": "Collectors batch samples into a partitioned log. Writers persist compressed time blocks and produce rollups. Query and alert services read at suitable resolutions.",
+        "deepDives": [
+          {
+            "question": "Which label can overwhelm the system?",
+            "response": "An unbounded label such as request ID creates a new series per request. Enforce budgets and alert on growing active-series counts."
+          },
+          {
+            "question": "How do you handle duplicate or delayed samples?",
+            "response": "Use a deterministic series/timestamp identity and a bounded lateness policy. Publish rollup revisions when late data changes a window."
+          }
+        ],
+        "verify": "Replay a batch at peak rate and measure ingestion lag and dashboard query latency."
+      }
     },
     "job-scheduler": {
       "intro": "Separate durable schedule definitions from execution attempts, and make workers safe to retry after partial failure.",
@@ -584,16 +765,46 @@
           "name": "PostgreSQL",
           "role": "Due jobs and run state.",
           "reason": "Index due jobs by time and shard. Claim with FOR UPDATE SKIP LOCKED and commit a run with an outbox row.",
-          "tradeoff": "Large bursts can still strain the database. Pace claims and keep transactions short."
+          "tradeoff": "Large bursts can still strain the database. Pace claims and keep transactions short.",
+          "highlight": true
         },
         {
           "id": "work",
           "name": "Amazon SQS",
           "role": "Execution queue.",
           "reason": "Use visibility timeouts for abandoned work and a dead-letter queue for exhausted retries.",
-          "tradeoff": "Queue delivery is at least once. Workers still need a stable run ID and an idempotent side effect."
+          "tradeoff": "Queue delivery is at least once. Workers still need a stable run ID and an idempotent side effect.",
+          "highlight": true
         }
-      ]
+      ],
+      "interviewAnswer": {
+        "scope": "Run delayed and recurring jobs, expose status, and retry abandoned work.",
+        "constraints": "Handle millions of jobs and clarify execution lag. Treat each occurrence as a stable run with at-least-once delivery.",
+        "outOfScope": "A general-purpose DAG workflow engine.",
+        "entities": "Job definition, occurrence, execution attempt, claim lease and outbox event.",
+        "interfaces": [
+          {
+            "call": "POST /jobs",
+            "purpose": "Register a schedule and payload."
+          },
+          {
+            "call": "GET /runs/{id}",
+            "purpose": "Read status and attempt history."
+          }
+        ],
+        "baseline": "Schedulers scan due partitions, claim jobs and create run records transactionally. A relay enqueues work. Workers report outcomes using the run ID.",
+        "deepDives": [
+          {
+            "question": "What if a scheduler crashes after claiming?",
+            "response": "Persist a claim expiry and the outbox with the run. Another process can dispatch or reclaim it without losing the occurrence."
+          },
+          {
+            "question": "What if a worker finishes before its acknowledgement reaches the queue?",
+            "response": "The queue can deliver the run again. Make the business side effect idempotent per run or use a transaction that records completion alongside it."
+          }
+        ],
+        "verify": "Kill schedulers and workers at each commit or acknowledgement boundary."
+      }
     },
     "chat-messaging": {
       "intro": "A strong answer follows a repeatable path: clarify the goal, make the data and interfaces concrete, draw the main request flow, then deepen the riskiest parts and explain tradeoffs.",
@@ -659,17 +870,19 @@
       "stack": [
         {
           "id": "socket",
-          "name": "Go + WebSockets",
+          "name": "WebSockets",
           "role": "Live client sessions.",
           "reason": "Keep authenticated persistent connections for send, receive, and reconnect flows.",
-          "tradeoff": "A gateway restart drops live sessions. Clients reconnect and catch up from a cursor."
+          "tradeoff": "A gateway restart drops live sessions. Clients reconnect and catch up from a cursor.",
+          "highlight": true
         },
         {
           "id": "log",
           "name": "Apache Kafka",
           "role": "Durable conversation log.",
           "reason": "Key messages by conversation for per-conversation sequencing and fanout replay.",
-          "tradeoff": "A very large conversation can overload one partition. Separate notification fanout from the write path."
+          "tradeoff": "A very large conversation can overload one partition. Separate notification fanout from the write path.",
+          "highlight": true
         },
         {
           "id": "history",
@@ -678,7 +891,35 @@
           "reason": "Project accepted messages to a table queried by conversation and sequence, with bucketed partitions for long histories.",
           "tradeoff": "The history projection can lag the live log. Track its applied cursor and fill missing messages from retained data."
         }
-      ]
+      ],
+      "interviewAnswer": {
+        "scope": "Send direct and group messages and sync missed messages across devices.",
+        "constraints": "Support 100M users. Agree on per-conversation ordering, offline delivery, and retention.",
+        "outOfScope": "Voice calls and media processing.",
+        "entities": "Conversation, membership, message ID, sequence number and per-device cursor.",
+        "interfaces": [
+          {
+            "call": "SendMessage(conversation, clientMessageId, body)",
+            "purpose": "Accept a message and return its assigned position."
+          },
+          {
+            "call": "GET /conversations/{id}/messages",
+            "purpose": "Catch up after a device cursor."
+          }
+        ],
+        "baseline": "A gateway authenticates the client. Append accepted messages to the conversation’s durable log, then fan out live delivery and update a queryable history for reconnects.",
+        "deepDives": [
+          {
+            "question": "How do you preserve order during reconnect?",
+            "response": "Assign one ordered sequence per conversation. Devices resume from their last applied sequence and deduplicate message IDs."
+          },
+          {
+            "question": "What if a very large group overwhelms the delivery path?",
+            "response": "Separate the ordered append from fanout. Shard fanout work by recipients and degrade push delivery while history remains available."
+          }
+        ],
+        "verify": "Disconnect one device, resend a message, reconnect, and verify ordered replay without duplicates."
+      }
     },
     "video-streaming": {
       "intro": "A strong answer follows a repeatable path: clarify the goal, make the data and interfaces concrete, draw the main request flow, then deepen the riskiest parts and explain tradeoffs.",
@@ -758,7 +999,8 @@
           "name": "Amazon S3",
           "role": "Media origin.",
           "reason": "Keep source uploads and rendered segments in object storage, with direct multipart upload.",
-          "tradeoff": "Publishing manifests must wait for all referenced segments to exist."
+          "tradeoff": "Publishing manifests must wait for all referenced segments to exist.",
+          "highlight": true
         },
         {
           "id": "encode",
@@ -772,9 +1014,38 @@
           "name": "Amazon CloudFront",
           "role": "Segment delivery.",
           "reason": "Cache HLS media segments near viewers and scope private playback with signed access.",
-          "tradeoff": "A cold or popular asset can still stress the origin. Track cache hits and size the origin for misses."
+          "tradeoff": "A cold or popular asset can still stress the origin. Track cache hits and size the origin for misses.",
+          "highlight": true
         }
-      ]
+      ],
+      "interviewAnswer": {
+        "scope": "Upload video, produce several playable bitrates, and stream globally.",
+        "constraints": "Clarify upload size, startup latency, peak concurrency, and publication rules.",
+        "outOfScope": "Live streaming and recommendations.",
+        "entities": "Upload session, video, rendition, segment and manifest.",
+        "interfaces": [
+          {
+            "call": "POST /uploads",
+            "purpose": "Create a direct multipart upload."
+          },
+          {
+            "call": "GET /videos/{id}/manifest",
+            "purpose": "Return playable renditions and authorized segment access."
+          }
+        ],
+        "baseline": "Upload to object storage, enqueue an encoding job, and publish the manifest after all required segments exist. Clients stream segments through a CDN.",
+        "deepDives": [
+          {
+            "question": "What happens if encoding retries?",
+            "response": "Make each rendition job repeatable by source version. Write to versioned paths and publish manifest state once the outputs are complete."
+          },
+          {
+            "question": "How does a viral video change capacity planning?",
+            "response": "Playback egress matters more than metadata QPS. Cache immutable segments at the edge and size or shield the origin for cold misses."
+          }
+        ],
+        "verify": "Fail a transcoder midway and load-test a cold popular video at the origin."
+      }
     },
     "ride-sharing": {
       "intro": "A strong answer follows a repeatable path: clarify the goal, make the data and interfaces concrete, draw the main request flow, then deepen the riskiest parts and explain tradeoffs.",
@@ -850,16 +1121,50 @@
           "name": "H3 + Redis Cluster",
           "role": "Live driver location index.",
           "reason": "Map coordinates to H3 cells and store recent positions in time sorted sets. Search neighboring cells and filter by distance.",
-          "tradeoff": "Moving between cells can briefly leave stale or duplicate entries. Recheck timestamps and the latest driver position."
+          "tradeoff": "Moving between cells can briefly leave stale or duplicate entries. Recheck timestamps and the latest driver position.",
+          "highlight": true
         },
         {
           "id": "trips",
           "name": "PostgreSQL",
           "role": "Trip and offer state.",
           "reason": "Commit a valid offer acceptance and driver assignment together in a transaction.",
-          "tradeoff": "Popular drivers and city partition boundaries can create contention. Keep an assignment authority per driver."
+          "tradeoff": "Popular drivers and city partition boundaries can create contention. Keep an assignment authority per driver.",
+          "highlight": true
         }
-      ]
+      ],
+      "interviewAnswer": {
+        "scope": "Track available drivers, match a rider, and maintain trip, price and payment state.",
+        "constraints": "Clarify dispatch latency, position freshness, and whether the same driver may receive competing offers.",
+        "outOfScope": "Turn-by-turn navigation and pricing model training. Treat payments as a separate service.",
+        "entities": "Driver position, ride request, offer, trip and payment reference.",
+        "interfaces": [
+          {
+            "call": "UpdateLocation(driver, point, timestamp)",
+            "purpose": "Refresh location and availability."
+          },
+          {
+            "call": "POST /trips",
+            "purpose": "Request a ride and quote."
+          },
+          {
+            "call": "AcceptOffer(offerId)",
+            "purpose": "Confirm the offer if the driver is still eligible."
+          }
+        ],
+        "baseline": "Maintain a live geo index for discovery. The matching service searches nearby cells. The trip store accepts an offer only if the driver and offer are still eligible.",
+        "deepDives": [
+          {
+            "question": "Can two riders claim one driver?",
+            "response": "At acceptance, update the driver assignment and trip together within the owning partition. An eventually consistent location index only finds candidates."
+          },
+          {
+            "question": "What if a nearby driver has gone offline?",
+            "response": "Filter on last-update time, confirm current availability and expire unaccepted offers. Expand the search region if too few drivers remain."
+          }
+        ],
+        "verify": "Race two accepts for one driver and inject delayed or reordered location updates."
+      }
     },
     "search-autocomplete": {
       "intro": "A strong answer follows a repeatable path: clarify the goal, make the data and interfaces concrete, draw the main request flow, then deepen the riskiest parts and explain tradeoffs.",
@@ -945,7 +1250,8 @@
           "name": "Lucene FST",
           "role": "Compact suggestion index.",
           "reason": "Serve weighted prefix candidates from a versioned finite-state index and swap snapshots atomically.",
-          "tradeoff": "Memory footprint depends on vocabulary and languages. Rebuild snapshots to apply broad changes."
+          "tradeoff": "Memory footprint depends on vocabulary and languages. Rebuild snapshots to apply broad changes.",
+          "highlight": true
         },
         {
           "id": "cache",
@@ -954,7 +1260,31 @@
           "reason": "Cache candidate lists by normalized prefix, locale, and index version before personalization.",
           "tradeoff": "A coarse cache key can mix locales or versions. Keep personal reranking outside the shared entry."
         }
-      ]
+      ],
+      "interviewAnswer": {
+        "scope": "Return top suggestions as users type. Support locale, popularity, and optional reranking.",
+        "constraints": "Low latency per keystroke and a clear freshness target for new suggestions.",
+        "outOfScope": "Full search results and indexing every keystroke in real time.",
+        "entities": "Normalized prefix, locale, suggestion, weight and index version.",
+        "interfaces": [
+          {
+            "call": "GET /suggest?q=&locale=",
+            "purpose": "Return a short ranked suggestion list."
+          }
+        ],
+        "baseline": "Aggregate allowed query signals into versioned prefix snapshots. A serving process loads the current index, looks up candidates, and optionally reranks them.",
+        "deepDives": [
+          {
+            "question": "Why precompute candidates?",
+            "response": "A weighted prefix index avoids scanning query history on each keystroke. Snapshot changes take longer to appear than live inserts but are easier to publish consistently."
+          },
+          {
+            "question": "How do cached results stay correct?",
+            "response": "Key shared entries by prefix, locale, and version. Apply user-specific reranking after the shared lookup and filter rare or unsafe query terms upstream."
+          }
+        ],
+        "verify": "Measure common prefixes, a cold cache, and the latency of switching to a new index snapshot."
+      }
     },
     "cloud-drive": {
       "intro": "A strong answer follows a repeatable path: clarify the goal, make the data and interfaces concrete, draw the main request flow, then deepen the riskiest parts and explain tradeoffs.",
@@ -1021,14 +1351,16 @@
           "name": "Amazon S3",
           "role": "File parts and versions.",
           "reason": "Store immutable blobs by tenant and content hash, with resumable multipart uploads.",
-          "tradeoff": "Deleting a file requires retaining referenced versions and collecting orphaned parts later."
+          "tradeoff": "Deleting a file requires retaining referenced versions and collecting orphaned parts later.",
+          "highlight": true
         },
         {
           "id": "sync",
           "name": "PostgreSQL",
           "role": "File metadata and change log.",
           "reason": "Commit the version and an ordered change record while updating the file’s current revision.",
-          "tradeoff": "Serialize cursor ordering per account or use a committed log offset. A global cursor can become a hotspot."
+          "tradeoff": "Serialize cursor ordering per account or use a committed log offset. A global cursor can become a hotspot.",
+          "highlight": true
         },
         {
           "id": "notify",
@@ -1037,7 +1369,39 @@
           "reason": "Tell connected devices that new changes exist. Devices still fetch the durable feed from a cursor.",
           "tradeoff": "Sockets drop. Reconnecting clients must poll or resume with the last applied cursor."
         }
-      ]
+      ],
+      "interviewAnswer": {
+        "scope": "Upload and download files, sync changes, share folders, and recover prior versions.",
+        "constraints": "Authorize every file read. Sync must resume after interruption and preserve colliding edits.",
+        "outOfScope": "Simultaneous editing inside documents.",
+        "entities": "File and folder, immutable version, content blob, ACL and account change cursor.",
+        "interfaces": [
+          {
+            "call": "POST /uploads",
+            "purpose": "Create a resumable upload session."
+          },
+          {
+            "call": "GET /changes?cursor=",
+            "purpose": "Return committed metadata changes."
+          },
+          {
+            "call": "GET /files/{id}/download",
+            "purpose": "Authorize access to an immutable version."
+          }
+        ],
+        "baseline": "Store bytes as immutable objects. The metadata transaction commits a file version and a change record. Together with an optional wakeup signal, cursor reads keep devices in sync.",
+        "deepDives": [
+          {
+            "question": "What happens to a signed URL after access is revoked?",
+            "response": "Keep URL lifetime within the agreed revocation bound or gate each request. Origin checks on newly issued URLs do not revoke a token already issued."
+          },
+          {
+            "question": "How does polling avoid missed changes?",
+            "response": "Use a committed cursor rather than a timestamp. Allow replay and deduplicate on the device. When a cursor is too old, provide a full resync."
+          }
+        ],
+        "verify": "Test conflicting edits, delayed wakeup delivery and ACL revocation against cached download access."
+      }
     },
     "web-crawler": {
       "intro": "A strong answer follows a repeatable path: clarify the goal, make the data and interfaces concrete, draw the main request flow, then deepen the riskiest parts and explain tradeoffs.",
@@ -1107,11 +1471,12 @@
           "name": "Amazon DynamoDB",
           "role": "Frontier and crawl leases.",
           "reason": "Store normalized URL state, schedule by host and due bucket, and claim work with a conditional lease update.",
-          "tradeoff": "A secondary index can lag and return stale candidates. Confirm eligibility on the authoritative item when claiming."
+          "tradeoff": "A secondary index can lag and return stale candidates. Confirm eligibility on the authoritative item when claiming.",
+          "highlight": true
         },
         {
           "id": "worker",
-          "name": "Python + Scrapy",
+          "name": "Scrapy",
           "role": "Fetching and parsing.",
           "reason": "Use bounded concurrency and robots policy, then apply per-host scheduling before sending requests.",
           "tradeoff": "A single worker’s politeness limit is insufficient across a fleet. Assign host ownership or coordinate the limit."
@@ -1123,7 +1488,35 @@
           "reason": "Store response bodies by fingerprint and keep crawl metadata separately.",
           "tradeoff": "Durable archives make reprocessing possible but need quotas, retention, and safeguards for sensitive content."
         }
-      ]
+      ],
+      "interviewAnswer": {
+        "scope": "Discover URLs, fetch allowed pages, extract links and forward new content to indexing.",
+        "constraints": "Billions of pages. Respect per-host limits and define freshness targets and deduplication scope.",
+        "outOfScope": "Ranking search results or building a general browser renderer.",
+        "entities": "Canonical URL, host policy, fetch lease, content fingerprint and next fetch time.",
+        "interfaces": [
+          {
+            "call": "EnqueueUrl(url, discoveredFrom)",
+            "purpose": "Normalize and schedule a discovered URL."
+          },
+          {
+            "call": "ClaimFetchBatch(worker, limit)",
+            "purpose": "Lease a bounded set of due URLs."
+          }
+        ],
+        "baseline": "A host-aware frontier leases due URLs. Fetchers apply site policy and budgets. A parser extracts content and new links, then sends eligible links back to the frontier.",
+        "deepDives": [
+          {
+            "question": "How does fleet-wide politeness work?",
+            "response": "Use one active owner or a shared limiter per host. Local worker counters alone cannot bound traffic from multiple workers."
+          },
+          {
+            "question": "What if a crawler dies after fetching?",
+            "response": "Reclaim the lease and make result publication idempotent. Deduplicate canonical URLs and separately fingerprint content."
+          }
+        ],
+        "verify": "Simulate a crawl trap and a high-volume host that returns 429 or stops responding."
+      }
     },
     "collaborative-editor": {
       "intro": "A strong answer follows a repeatable path: clarify the goal, make the data and interfaces concrete, draw the main request flow, then deepen the riskiest parts and explain tradeoffs.",
@@ -1194,14 +1587,16 @@
           "name": "Yjs",
           "role": "Document merging.",
           "reason": "Use a text CRDT so clients can apply and merge edits after disconnects.",
-          "tradeoff": "Large documents need compaction and snapshots. Membership checks still belong on the server."
+          "tradeoff": "Large documents need compaction and snapshots. Membership checks still belong on the server.",
+          "highlight": true
         },
         {
           "id": "socket",
           "name": "WebSockets",
           "role": "Live updates.",
           "reason": "Broadcast accepted changes to room members and close or reauthorize revoked sessions.",
-          "tradeoff": "A socket is ephemeral. Reconnects need a durable source of missed edits."
+          "tradeoff": "A socket is ephemeral. Reconnects need a durable source of missed edits.",
+          "highlight": true
         },
         {
           "id": "ops",
@@ -1210,7 +1605,35 @@
           "reason": "Store updates by document and operation ID, deduplicate retries, and write periodic snapshots.",
           "tradeoff": "Hot documents can concentrate writes. Bound the log between snapshots to keep reconnects cheap."
         }
-      ]
+      ],
+      "interviewAnswer": {
+        "scope": "Merge simultaneous text edits, persist comments, and reconnect offline editors.",
+        "constraints": "Clarify conflict behavior and document size. Authorized users should converge after receiving the same edits.",
+        "outOfScope": "Rich layout, spreadsheet formulas, and full document history export.",
+        "entities": "Document, edit with stable ID, version context, snapshot, membership and comment anchor.",
+        "interfaces": [
+          {
+            "call": "ConnectDocument(id, cursor)",
+            "purpose": "Join a document and request missing updates."
+          },
+          {
+            "call": "SubmitEdit(document, opId, update)",
+            "purpose": "Persist and distribute an edit."
+          }
+        ],
+        "baseline": "A room accepts authorized edits, merges them with a text CRDT, persists accepted updates, then broadcasts them. Clients reconnect from a cursor or snapshot.",
+        "deepDives": [
+          {
+            "question": "How do concurrent offline edits converge?",
+            "response": "Choose a CRDT with defined merge semantics. Send stable updates with causal context and make duplicate delivery harmless."
+          },
+          {
+            "question": "What limits the size of a long editing session?",
+            "response": "Snapshot and compact the update log where clients can safely resume. Define how old offline clients recover when history has expired."
+          }
+        ],
+        "verify": "Replay the same edit set in different orders, with duplicates and a reconnect after compaction."
+      }
     },
     "distributed-cache": {
       "intro": "A strong answer follows a repeatable path: clarify the goal, make the data and interfaces concrete, draw the main request flow, then deepen the riskiest parts and explain tradeoffs.",
@@ -1281,9 +1704,42 @@
           "name": "Memcached",
           "role": "Disposable in-memory cache.",
           "reason": "Use TTL and eviction for individual cached keys while keeping the database authoritative.",
-          "tradeoff": "Node loss drops cached entries. Protect the origin with request coalescing and concurrency limits."
+          "tradeoff": "Node loss drops cached entries. Protect the origin with request coalescing and concurrency limits.",
+          "highlight": true
         }
-      ]
+      ],
+      "interviewAnswer": {
+        "scope": "Serve get, set and invalidate at high throughput with expiration and bounded fallback.",
+        "constraints": "Define maximum staleness and acceptable behavior during cache loss. Keep the origin authoritative.",
+        "outOfScope": "Durability of cached values and business writes.",
+        "entities": "Cache key, cached value/version, expiry and shard membership.",
+        "interfaces": [
+          {
+            "call": "Get(key)",
+            "purpose": "Return a cached value or a miss."
+          },
+          {
+            "call": "Set(key, value, ttl)",
+            "purpose": "Store a value for a bounded time."
+          },
+          {
+            "call": "Invalidate(key)",
+            "purpose": "Remove or supersede an entry."
+          }
+        ],
+        "baseline": "A proxy maps a key to an in-memory shard. A cache miss goes through a bounded origin loader, which coalesces concurrent reads before filling the cache.",
+        "deepDives": [
+          {
+            "question": "What happens after a shard fails?",
+            "response": "Limit origin concurrency and reassign keys gradually. Use bounded stale fallback only for data that can tolerate it."
+          },
+          {
+            "question": "What happens when an update races with a fill?",
+            "response": "Use versioned fills or a conditional publish. A delayed fetch must not overwrite a newer cached value after invalidation."
+          }
+        ],
+        "verify": "Kill a shard during a hot-key burst and compare origin QPS with and without coalescing."
+      }
     },
     "event-ticketing": {
       "intro": "A strong answer follows a repeatable path: clarify the goal, make the data and interfaces concrete, draw the main request flow, then deepen the riskiest parts and explain tradeoffs.",
@@ -1380,7 +1836,8 @@
           "name": "MySQL (InnoDB)",
           "role": "Authoritative seat inventory.",
           "reason": "Lock or conditionally update the seat row, then commit the hold or sale with a unique reservation ID.",
-          "tradeoff": "Contention rises for a popular event. Admit fewer checkouts and shard by event where feasible."
+          "tradeoff": "Contention rises for a popular event. Admit fewer checkouts and shard by event where feasible.",
+          "highlight": true
         },
         {
           "id": "payments",
@@ -1389,7 +1846,39 @@
           "reason": "Use a stable idempotency key and reconcile provider events before confirming a ticket.",
           "tradeoff": "An external charge cannot commit in the seat transaction. Handle late callbacks and compensating refunds."
         }
-      ]
+      ],
+      "interviewAnswer": {
+        "scope": "Browse events, hold a seat, pay, and receive a unique ticket.",
+        "constraints": "Absorb launch bursts and guarantee that a seat cannot be sold twice.",
+        "outOfScope": "Resale, dynamic pricing, and long-term recommendations.",
+        "entities": "Event, seat, expiring hold, order, payment attempt and ticket.",
+        "interfaces": [
+          {
+            "call": "POST /holds",
+            "purpose": "Atomically hold the requested seat for a short period."
+          },
+          {
+            "call": "POST /orders",
+            "purpose": "Start payment for a valid hold."
+          },
+          {
+            "call": "GET /orders/{id}",
+            "purpose": "Read confirmation or reconciliation status."
+          }
+        ],
+        "baseline": "Cache browsing and meter checkout. The inventory store creates a seat hold in a transaction. Payment completes asynchronously and the order service conditionally converts the valid hold into a ticket.",
+        "deepDives": [
+          {
+            "question": "How do you prevent two purchases for one seat?",
+            "response": "Enforce the invariant in the authoritative row or conditional transaction. Queue admission protects capacity but does not reserve inventory."
+          },
+          {
+            "question": "What if payment succeeds after the hold expires?",
+            "response": "Check the current order and hold state before confirming. Reconcile the late payment and refund if the seat cannot be allocated."
+          }
+        ],
+        "verify": "Race two buyers for one seat and deliver a successful provider callback after expiry."
+      }
     },
     "webhook-platform": {
       "intro": "Drive the discussion from requirements and a rough capacity estimate to a durable asynchronous pipeline. State that a delivery may be repeated: exactly-once effects cannot be guaranteed when an external endpoint can receive a request but its acknowledgement is lost. Give each delivery a stable ID so receivers can deduplicate.",
@@ -1460,7 +1949,8 @@
           "name": "Apache Kafka",
           "role": "Durable delivery event stream.",
           "reason": "Replay accepted events and fan out using stable delivery IDs.",
-          "tradeoff": "Partition ordering alone does not prevent one slow endpoint from delaying others. Apply fair endpoint scheduling."
+          "tradeoff": "Partition ordering alone does not prevent one slow endpoint from delaying others. Apply fair endpoint scheduling.",
+          "highlight": true
         },
         {
           "id": "control",
@@ -1471,12 +1961,40 @@
         },
         {
           "id": "workers",
-          "name": "Go HTTP worker pool",
+          "name": "Bounded HTTP worker pool",
           "role": "Outbound delivery.",
           "reason": "Use bounded concurrency and connection reuse, with time limits and per-endpoint pacing.",
           "tradeoff": "A network timeout leaves delivery ambiguous. Recipients should deduplicate the stable delivery ID."
         }
-      ]
+      ],
+      "interviewAnswer": {
+        "scope": "Register endpoints, publish events, retry deliveries and inspect delivery history.",
+        "constraints": "Allow at-least-once delivery, retry for up to 72 hours, and isolate slow endpoints at high fanout.",
+        "outOfScope": "Exactly-once processing by the recipient.",
+        "entities": "Event, endpoint, subscription, delivery ID and attempt.",
+        "interfaces": [
+          {
+            "call": "POST /events",
+            "purpose": "Durably accept an event with a deduplication key."
+          },
+          {
+            "call": "GET /deliveries/{id}",
+            "purpose": "Return attempt status and replay eligibility."
+          }
+        ],
+        "baseline": "Persist the event before acknowledging it. Fan out matching subscriptions into fair endpoint queues. Workers send signed deliveries and record attempts.",
+        "deepDives": [
+          {
+            "question": "What if one endpoint stays slow for hours?",
+            "response": "Limit concurrency and backlog per endpoint and tenant. Schedule retries separately from fresh deliveries to prevent retry storms."
+          },
+          {
+            "question": "What does an HTTP timeout tell you?",
+            "response": "The recipient may have processed the event. Retry with the same delivery ID and document what recipients must deduplicate."
+          }
+        ],
+        "verify": "Run a mixed workload with failing, slow and healthy endpoints and measure healthy delivery lag."
+      }
     },
     "payment-processing": {
       "intro": "Treat the payment lifecycle as a durable state machine backed by an immutable ledger. Make idempotency explicit at both the merchant API and the provider boundary. A timeout is an unknown outcome, not proof that the provider did nothing.",
@@ -1544,7 +2062,8 @@
           "name": "MySQL (InnoDB)",
           "role": "Payment state and ledger.",
           "reason": "Commit the intent transition and outbox together, with balanced ledger entries committed atomically on their owning shard.",
-          "tradeoff": "Cross-shard money movement needs a separate settlement protocol. Never use a read replica to enforce a balance invariant."
+          "tradeoff": "Cross-shard money movement needs a separate settlement protocol. Never use a read replica to enforce a balance invariant.",
+          "highlight": true
         },
         {
           "id": "queue",
@@ -1558,9 +2077,42 @@
           "name": "Stripe PaymentIntents",
           "role": "Provider authorization and capture.",
           "reason": "Send idempotent requests and use signed events to reconcile ambiguous outcomes.",
-          "tradeoff": "A timeout can occur after a successful charge. Reconcile the existing intent before retrying with a different key."
+          "tradeoff": "A timeout can occur after a successful charge. Reconcile the existing intent before retrying with a different key.",
+          "highlight": true
         }
-      ]
+      ],
+      "interviewAnswer": {
+        "scope": "Create an intent, authorize or capture payments, refund, and expose state.",
+        "constraints": "Avoid duplicate charges and preserve auditable ledger entries. Provider timeouts can leave outcomes unknown.",
+        "outOfScope": "Building a card network or underwriting system.",
+        "entities": "Payment intent, merchant idempotency key, provider attempt, ledger entry and reconciliation record.",
+        "interfaces": [
+          {
+            "call": "POST /v1/payment-intents",
+            "purpose": "Create or return an intent by merchant and idempotency key."
+          },
+          {
+            "call": "POST /v1/payment-intents/{id}/capture",
+            "purpose": "Request capture for the current state."
+          },
+          {
+            "call": "GET /v1/payment-intents/{id}",
+            "purpose": "Read result or pending reconciliation."
+          }
+        ],
+        "baseline": "Commit each intent transition and its outbox together. A worker calls the provider with a stable key, reconciles callbacks, and posts a balanced ledger transaction once the outcome is known.",
+        "deepDives": [
+          {
+            "question": "What if the provider charges the customer before timing out?",
+            "response": "Keep the outcome pending. Query or reconcile the same provider intent before starting another attempt with a different key."
+          },
+          {
+            "question": "What must be atomic?",
+            "response": "A ledger transaction writes both sides of the movement together. An external charge cannot share that transaction, so recovery must handle both systems explicitly."
+          }
+        ],
+        "verify": "Inject crashes after provider success and before ledger commit, then verify a single charge and balanced entries."
+      }
     },
     "feature-flag-platform": {
       "intro": "Separate configuration authoring from evaluation. Keep evaluations in the client or regional data plane, and distribute immutable, versioned configuration snapshots. Define the freshness guarantee for kill switches and show how clients behave when they cannot fetch a new version.",
@@ -1660,7 +2212,8 @@
           "name": "Amazon S3 + CloudFront",
           "role": "Signed snapshot distribution.",
           "reason": "Publish immutable signed rule snapshots, using a short-lived manifest to advertise the latest version.",
-          "tradeoff": "Caches and offline clients can miss a kill switch. Define a safe fallback and staleness budget."
+          "tradeoff": "Caches and offline clients can miss a kill switch. Define a safe fallback and staleness budget.",
+          "highlight": true
         },
         {
           "id": "sdk",
@@ -1669,7 +2222,39 @@
           "reason": "Expose a standard flag API and apply deterministic rollout rules against the SDK’s cached snapshot.",
           "tradeoff": "The provider must implement and test consistent targeting, rollout hashing, and offline behavior in each supported runtime."
         }
-      ]
+      ],
+      "interviewAnswer": {
+        "scope": "Manage flags, publish rule changes and evaluate flags locally in application SDKs.",
+        "constraints": "Serve up to 2M evaluations/s globally with local evaluation under 5 ms. Define how quickly an online client must receive a kill switch and how callers behave offline.",
+        "outOfScope": "A/B test analysis and general application configuration.",
+        "entities": "Tenant, flag, rule, config revision, environment, and evaluation subject.",
+        "interfaces": [
+          {
+            "call": "PUT /v1/flags/{key}",
+            "purpose": "Write an audited rule change with an expected revision."
+          },
+          {
+            "call": "GET /v1/config/{environment}",
+            "purpose": "Fetch the current authorized, versioned snapshot."
+          },
+          {
+            "call": "evaluate(flag, subject, default)",
+            "purpose": "Apply the local rules or the declared fallback."
+          }
+        ],
+        "baseline": "Commit a new rules revision in PostgreSQL, then publish a versioned snapshot through the CDN. SDKs refresh when signaled or at their polling interval and swap complete revisions atomically.",
+        "deepDives": [
+          {
+            "question": "How do users stay in the same rollout cohort?",
+            "response": "Hash a stable subject ID with a flag-specific salt into fixed buckets. Raising the rollout threshold keeps the previously admitted buckets in the cohort."
+          },
+          {
+            "question": "What happens when an SDK cannot refresh?",
+            "response": "Keep the last known good snapshot for a bounded period. Define a safe expiry fallback per flag and measure propagation for connected clients separately."
+          }
+        ],
+        "verify": "Exercise missed notifications, intermittent connectivity and out-of-order revisions, and measure when an online client actually applies a kill switch."
+      }
     },
     "durable-message-broker": {
       "intro": "Use replicated, append-only partition logs as the durable source of truth. Separate a small strongly consistent metadata plane from the high-throughput broker data plane, and make offsets, acknowledgement rules, and failure recovery explicit.",
@@ -1766,10 +2351,11 @@
       "stack": [
         {
           "id": "broker",
-          "name": "Go + etcd/raft",
+          "name": "Raft replicated log",
           "role": "Partition leadership and replication.",
-          "reason": "Implement one replicated log per partition, with fenced terms and committed offsets.",
-          "tradeoff": "The library provides consensus primitives. The broker still needs group coordination, recovery, and disk durability rules."
+          "reason": "Replicate one ordered log per partition, with leader terms and committed offsets.",
+          "tradeoff": "Quorum writes add network and flush latency. Group coordination and consumer processing guarantees are separate design decisions.",
+          "highlight": true
         },
         {
           "id": "media",
@@ -1785,7 +2371,39 @@
           "reason": "Define bounded batch publish, fetch, and offset commit requests with stable producer sequence IDs.",
           "tradeoff": "RPC retries can replay a request. Preserve producer deduplication across failover."
         }
-      ]
+      ],
+      "interviewAnswer": {
+        "scope": "Append messages, read them by group, and replay within seven days.",
+        "constraints": "Preserve order within each partition and retain acknowledged messages through one broker failure. Support 1M events/s at peak.",
+        "outOfScope": "Atomic transactions or global ordering across partitions.",
+        "entities": "Topic, partition, record, offset, replica term and consumer group checkpoint.",
+        "interfaces": [
+          {
+            "call": "produce(topic, key, record)",
+            "purpose": "Route the key to a partition and return a committed offset."
+          },
+          {
+            "call": "fetch(partition, offset, limit)",
+            "purpose": "Read a page from the committed log."
+          },
+          {
+            "call": "commit(group, partition, nextOffset)",
+            "purpose": "Record the next offset for the group."
+          }
+        ],
+        "baseline": "Route each key to a partition leader. The leader appends records and acknowledges after a durable quorum commits them. Consumers fetch committed records and advance independent checkpoints after processing.",
+        "deepDives": [
+          {
+            "question": "What if the leader dies just after acknowledging?",
+            "response": "With three replicas, require a durable majority for an acknowledgement. Elect a leader that preserves the committed prefix and reject writes from stale terms. A retry can still duplicate a record without producer deduplication."
+          },
+          {
+            "question": "Can one slow consumer stop the broker?",
+            "response": "Let groups fall behind independently. Keep data for the retention window and surface an explicit out-of-range result when a group needs an offset already deleted."
+          }
+        ],
+        "verify": "Kill a partition leader immediately after acknowledgement and verify committed offsets, ordering, and recovery from checkpoints."
+      }
     },
     "distributed-tracing": {
       "intro": "Separate collecting spans from selecting and querying traces. Trace IDs connect causal spans across services, while bounded tail sampling retains useful requests without pretending that every distributed trace will be complete.",
@@ -1886,14 +2504,16 @@
           "name": "Apache Kafka",
           "role": "Trace input log.",
           "reason": "Partition by tenant and trace ID so one assembly owner sees the relevant spans.",
-          "tradeoff": "A partition reset or replay can redeliver spans. Deduplicate using span identity."
+          "tradeoff": "A partition reset or replay can redeliver spans. Deduplicate using span identity.",
+          "highlight": true
         },
         {
           "id": "sampling",
           "name": "Apache Flink",
           "role": "Stateful trace assembly.",
           "reason": "Group spans by trace ID with a bounded sampling window and checkpoint the assembly state.",
-          "tradeoff": "Late spans can miss the window. Track incomplete traces and reclaim state predictably."
+          "tradeoff": "Late spans can miss the window. Track incomplete traces and reclaim state predictably.",
+          "highlight": true
         },
         {
           "id": "index",
@@ -1902,7 +2522,39 @@
           "reason": "Keep large span chunks in S3 and index tenant, service, duration, and error fields in Elasticsearch.",
           "tradeoff": "Index and payload publication can lag each other. Validate references before returning results."
         }
-      ]
+      ],
+      "interviewAnswer": {
+        "scope": "Ingest trace spans, retrieve traces by ID and search recent slow or failed requests.",
+        "constraints": "Keep SDK overhead bounded. Make accepted spans visible within 30 seconds and preserve error traces that reach the collectors when feasible.",
+        "outOfScope": "General metrics aggregation and unbounded retention of every span.",
+        "entities": "Tenant, trace ID, span ID, parent span, service, timestamps, status and trace sampling decision.",
+        "interfaces": [
+          {
+            "call": "export(spans)",
+            "purpose": "Batch spans without blocking application requests."
+          },
+          {
+            "call": "GET /v1/traces/{id}",
+            "purpose": "Fetch a retained trace by ID."
+          },
+          {
+            "call": "GET /v1/traces?service=&status=&since=",
+            "purpose": "Search recent trace summaries."
+          }
+        ],
+        "baseline": "SDKs emit bounded batches to collectors. Kafka partitions spans by tenant and trace ID; Flink buffers related spans briefly for a sampling decision. Store retained traces and index searchable summaries.",
+        "deepDives": [
+          {
+            "question": "Why sample after collecting spans?",
+            "response": "A failure may only appear in a child span. Grouping by trace ID enables an error-based choice, but adds memory and wait time. Bound both per tenant and define a policy for spans that arrive late."
+          },
+          {
+            "question": "What if ingestion is saturated?",
+            "response": "Use bounded SDK queues with asynchronous export. Record drops and enforce per-tenant limits so one application cannot consume buffering for all tenants."
+          }
+        ],
+        "verify": "Measure retention and visibility lag for synthetic traces with late error spans during a collector outage."
+      }
     },
     "game-leaderboard": {
       "intro": "Treat accepted score events as durable facts and the ranking index as a recoverable view. Define a total order and snapshot version so that “exact rank” has a precise meaning even while scores are changing.",
@@ -1994,7 +2646,8 @@
           "name": "Sharded MySQL (InnoDB)",
           "role": "Authoritative score accounting.",
           "reason": "Deduplicate accepted events and commit a player’s score, version, and outbox in one transaction.",
-          "tradeoff": "Sharding by player scales writes and makes exact global rank a separate computation."
+          "tradeoff": "Sharding by player scales writes and makes exact global rank a separate computation.",
+          "highlight": true
         },
         {
           "id": "stream",
@@ -2010,7 +2663,35 @@
           "reason": "Use a seasonal sorted set, ZRANK, and range reads. Encode ascending player-ID tie order with an inverted numeric score and a fixed-width member ID.",
           "tradeoff": "A seasonal set lives on one Redis shard. Use a transactional ordered index for sharded exact ranks or relax the exactness requirement."
         }
-      ]
+      ],
+      "interviewAnswer": {
+        "scope": "Accept score updates and show top 100, exact personal rank and neighboring players.",
+        "constraints": "Provide a consistent ranked view with updates normally within two seconds. Preserve acknowledged scores, break ties by ascending player ID, and finalize each season.",
+        "outOfScope": "Game scoring and anti-cheat detection.",
+        "entities": "Season, player ID, score, score version, rank projection and finalized snapshot.",
+        "interfaces": [
+          {
+            "call": "submitScore(season, player, eventId, delta)",
+            "purpose": "Apply a trusted game server’s score event once and return its accepted version."
+          },
+          {
+            "call": "GET /v1/seasons/{id}/leaderboard",
+            "purpose": "Read top scores or a ranked neighborhood around a player."
+          }
+        ],
+        "baseline": "Commit scores durably in MySQL and project versioned changes to a rank index. A Redis sorted set can illustrate exact rank for a small leaderboard. At the target scale, partition the rank projection by score ranges.",
+        "deepDives": [
+          {
+            "question": "How can a partitioned view return an exact rank?",
+            "response": "Add the counts of preceding ranges to the local rank within the player’s range. Split on the full (score, player ID) order, update the old and new ranges and their counts atomically, and read the counts and local rank at the same snapshot."
+          },
+          {
+            "question": "How do you close a season without losing accepted scores?",
+            "response": "Close writes at a durable cutoff, drain the projection through it, then publish a versioned immutable report. Compare the final projection to a rebuild from authoritative scores."
+          }
+        ],
+        "verify": "Compare ranks with a full sort while players cross partition boundaries and while the new snapshot is being published."
+      }
     },
     "distributed-lock-service": {
       "intro": "Use consensus to serialize lease grants and monotonically increasing fencing tokens to reject obsolete owners at the protected resource. Lease expiry enables progress, while downstream validation provides the safety that a paused client cannot provide for itself.",
@@ -2101,11 +2782,12 @@
           "name": "etcd",
           "role": "Consensus lease and grant storage.",
           "reason": "Store each grant using an etcd transaction with a lease, a durable fencing generation, and revision watches.",
-          "tradeoff": "Sharding independent resources across clusters is application work. A hot resource must still serialize grants."
+          "tradeoff": "Sharding independent resources across clusters is application work. A hot resource must still serialize grants.",
+          "highlight": true
         },
         {
           "id": "api",
-          "name": "Go + gRPC",
+          "name": "gRPC",
           "role": "Lock coordinator API.",
           "reason": "Implement acquire, renew, release, and watch around the authoritative shard for each resource.",
           "tradeoff": "Clients need bounded retry and must stop protected work when lease renewal is uncertain."
@@ -2117,7 +2799,39 @@
           "reason": "Check and advance the highest token while applying a protected write in the same transaction.",
           "tradeoff": "Downstream systems without an atomic token check cannot enforce stale-owner exclusion."
         }
-      ]
+      ],
+      "interviewAnswer": {
+        "scope": "Acquire, renew, and release a lease for one named resource, with bounded waiting.",
+        "constraints": "Preserve committed lease grants across one node failure. A resumed worker must be fenced once a newer owner gains authority.",
+        "outOfScope": "Atomic acquisition of multiple locks.",
+        "entities": "Resource key, lease ID, expiration, fencing token and ownership revision.",
+        "interfaces": [
+          {
+            "call": "acquire(resource, ttl, wait)",
+            "purpose": "Return a lease and increasing fencing token when granted."
+          },
+          {
+            "call": "renew(lease)",
+            "purpose": "Extend the current lease if it still owns the resource."
+          },
+          {
+            "call": "release(lease)",
+            "purpose": "Remove ownership only if the lease still matches."
+          }
+        ],
+        "baseline": "Use an etcd transaction to create a leased ownership key if absent. Return a monotonic revision as a fencing token. The resource applies writes with a token check in the same transaction as the write.",
+        "deepDives": [
+          {
+            "question": "What if a worker resumes after its lease expires?",
+            "response": "Make the protected resource register the next token before the new owner is allowed to act. It then rejects operations carrying older tokens, including requests from a paused worker."
+          },
+          {
+            "question": "What happens when the coordinator loses quorum?",
+            "response": "Decline renewals and grants that cannot be committed. Workers treat ambiguous renewal as possible loss of ownership. The protected resource still enforces fencing."
+          }
+        ],
+        "verify": "Suspend a worker, establish a newer token at the resource and then resume the old worker. Verify its delayed write is rejected."
+      }
     },
     "package-registry": {
       "intro": "Keep immutable, digest-addressed artifact bytes separate from transactional package metadata. Publish a version only after its artifact is verified and durable, and make provenance, namespace ownership, and revocation semantics explicit.",
@@ -2212,14 +2926,16 @@
           "name": "Amazon S3",
           "role": "Staging and immutable artifact storage.",
           "reason": "Upload to a staging key, verify the digest, and copy to a durable digest-addressed path before publication.",
-          "tradeoff": "Object durability and metadata commit are separate. Keep a grace period for orphan cleanup."
+          "tradeoff": "Object durability and metadata commit are separate. Keep a grace period for orphan cleanup.",
+          "highlight": true
         },
         {
           "id": "catalog",
           "name": "PostgreSQL",
           "role": "Package metadata and version constraints.",
           "reason": "Use a unique namespace/name/version key and conditional tag updates, and commit an outbox entry with publication.",
-          "tradeoff": "Metadata can lag edge caches. Make quarantine checks explicit at download time."
+          "tradeoff": "Metadata can lag edge caches. Make quarantine checks explicit at download time.",
+          "highlight": true
         },
         {
           "id": "edge",
@@ -2228,7 +2944,39 @@
           "reason": "Cache immutable blobs at the edge and use short-lived signed access for private versions.",
           "tradeoff": "Cache invalidation cannot recall artifacts already downloaded. Private reads still require authorization."
         }
-      ]
+      ],
+      "interviewAnswer": {
+        "scope": "Publish immutable package versions, resolve metadata, download artifacts and quarantine versions.",
+        "constraints": "Acknowledged versions must be durable and normally visible within 30 seconds. Enforce access to private packages and define the limit of revocation.",
+        "outOfScope": "Solving client-side dependency graphs or undoing a download.",
+        "entities": "Package and namespace, immutable version, manifest, artifact digest, visibility policy and quarantine state.",
+        "interfaces": [
+          {
+            "call": "POST /v1/packages/{name}/versions",
+            "purpose": "Publish a version after artifact upload and digest verification."
+          },
+          {
+            "call": "GET /v1/packages/{name}/{version}",
+            "purpose": "Return authorized metadata and a download URL."
+          },
+          {
+            "call": "POST /v1/packages/{name}/{version}/quarantine",
+            "purpose": "Mark the version unavailable and trigger cache purge."
+          }
+        ],
+        "baseline": "Upload the blob to S3 by digest, verify it, then commit the version in PostgreSQL under a unique namespace, package and version. Resolve metadata before granting access to a cached or origin artifact.",
+        "deepDives": [
+          {
+            "question": "What if two publishers race for the same version?",
+            "response": "Enforce uniqueness in the catalog transaction. A matching digest can return the prior result for a retried publish. A different digest conflicts; eventually collect orphan uploads."
+          },
+          {
+            "question": "What can quarantine guarantee?",
+            "response": "The catalog stops new resolutions. Bound cached access through short-lived grants or purge and say how long existing URLs remain valid. Bytes a user already downloaded remain outside the registry’s control."
+          }
+        ],
+        "verify": "Retry a publish after a lost acknowledgement, then quarantine the release and verify the download policy on both a warm edge and origin."
+      }
     },
     "secrets-manager": {
       "intro": "Separate authorization, encrypted version storage, and rotation orchestration. Use short-lived workload identity, envelope encryption, and explicit policy freshness so the service’s access guarantees remain clear during caching and regional failures.",
@@ -2337,9 +3085,42 @@
           "name": "AWS KMS",
           "role": "Envelope encryption key service.",
           "reason": "Create and unwrap per-version data keys using a tenant and secret scoped encryption context.",
-          "tradeoff": "KMS availability and quotas affect reads. Ciphertext caches help storage load, but cached data keys still need authorization."
+          "tradeoff": "KMS availability and quotas affect reads. Ciphertext caches help storage load, but cached data keys still need authorization.",
+          "highlight": true
         }
-      ]
+      ],
+      "interviewAnswer": {
+        "scope": "Read authorized secret versions and let operators create, rotate and revoke access with an audit trail.",
+        "constraints": "Target under 100 ms regional reads and a 60-second online revocation bound. Acknowledge only durable versions.",
+        "outOfScope": "Revoking plaintext already delivered without also rotating the underlying credential.",
+        "entities": "Workload identity, tenant policy revision, secret version, encrypted data key, ciphertext and audit record.",
+        "interfaces": [
+          {
+            "call": "GET /v1/secrets/{name}?version=",
+            "purpose": "Authorize and read an allowed version."
+          },
+          {
+            "call": "POST /v1/secrets/{name}/versions",
+            "purpose": "Store a new encrypted version."
+          },
+          {
+            "call": "PUT /v1/secrets/{name}/policy",
+            "purpose": "Commit a policy revision."
+          }
+        ],
+        "baseline": "Authenticate workload identity and authorize access against tenant policy. Store envelope-encrypted versions and use AWS KMS to unwrap data keys under scoped permissions. Audit the request without recording the secret.",
+        "deepDives": [
+          {
+            "question": "How does caching affect revocation?",
+            "response": "Keep the maximum combined propagation lag and positive authorization cache lifetime within 60 seconds. When policy freshness cannot be established, fail closed for reads requiring that guarantee."
+          },
+          {
+            "question": "How do you handle KMS latency and outages?",
+            "response": "Measure cold and warm decrypt latency. Any bounded data-key cache needs tenant and key isolation plus an explicit exposure policy. Authorization must still be checked before returning plaintext."
+          }
+        ],
+        "verify": "Revoke a workload while regional caches are warm and policy updates are delayed, then verify the last permitted online read is within the bound."
+      }
     },
     "document-search-engine": {
       "intro": "Use an inverted index as a recoverable projection of authoritative versioned documents. Separate candidate retrieval and ranking from final permission checks so an index-refresh delay never becomes permission to disclose document content.",
@@ -2453,9 +3234,42 @@
           "name": "Elasticsearch",
           "role": "Inverted index and ranking.",
           "reason": "Use language analyzers, term positions for phrases, BM25 ranking and point-in-time pagination.",
-          "tradeoff": "The index is eventually consistent. Check current ACLs before returning any protected text."
+          "tradeoff": "The index is eventually consistent. Check current ACLs before returning any protected text.",
+          "highlight": true
         }
-      ]
+      ],
+      "interviewAnswer": {
+        "scope": "Ingest, update and delete documents, then return ranked full-text results with filters.",
+        "constraints": "Aim for p95 under 300 ms and searchable updates within 30 seconds. A stale index must not disclose a document after access is removed.",
+        "outOfScope": "Document editing and general web crawling.",
+        "entities": "Tenant, document ID, content version, permission revision, search document and pagination cursor.",
+        "interfaces": [
+          {
+            "call": "PUT /v1/documents/{id}",
+            "purpose": "Durably update the document and schedule indexing."
+          },
+          {
+            "call": "DELETE /v1/documents/{id}",
+            "purpose": "Record the deletion and remove the search copy asynchronously."
+          },
+          {
+            "call": "GET /v1/search?q=&cursor=",
+            "purpose": "Find authorized ranked results."
+          }
+        ],
+        "baseline": "Keep documents and permissions in the authoritative store. Project versioned updates to Elasticsearch. Retrieve bounded candidate batches, then check current permissions before returning titles, snippets or other document data.",
+        "deepDives": [
+          {
+            "question": "What if the index still contains a deleted or revoked document?",
+            "response": "Use a current, authoritative existence and permission check as the final gate. Drop candidates if the gate fails or cannot establish access. Apply the same rule to totals and suggestions that could expose the document."
+          },
+          {
+            "question": "What happens to pagination when many candidates are denied?",
+            "response": "Use a stable search cursor and bounded over-fetch. Return a shorter page if the authorization budget is exhausted; avoid skipping unevaluated candidates."
+          }
+        ],
+        "verify": "Revoke a permission and pause indexing, then test snippets, page boundaries and aggregate counts as the affected user."
+      }
     },
     "content-delivery-network": {
       "intro": "Keep request serving local to the edge, and distribute versioned routing and invalidation state through a separate control plane. Cache correctness depends on the complete cache key, eligibility rules, and how purge generations interact with in-flight origin fetches.",
@@ -2560,11 +3374,12 @@
           "name": "GeoDNS",
           "role": "Edge traffic steering.",
           "reason": "Direct clients to an available edge region with latency and geographic routing records.",
-          "tradeoff": "Resolver caching slows failover. Expiring serving leases still need enforcement at the edge."
+          "tradeoff": "Resolver caching slows failover. Expiring serving leases still need enforcement at the edge.",
+          "highlight": true
         },
         {
           "id": "edge",
-          "name": "OpenResty (NGINX + Lua)",
+          "name": "OpenResty (NGINX)",
           "role": "Edge cache and origin shield.",
           "reason": "Cache HTTP responses and coalesce cold fills. Use custom policy checks for purge generations, signed requests, and control lease expiry.",
           "tradeoff": "Default cache directives alone do not enforce the purge guarantee. The edge code must reject stale generations and late in-flight fills."
@@ -2576,7 +3391,35 @@
           "reason": "Commit versioned purge state in PostgreSQL and relay it via Kafka to edge control agents.",
           "tradeoff": "Replicated event delivery is asynchronous. Track which serving edges applied each generation."
         }
-      ]
+      ],
+      "interviewAnswer": {
+        "scope": "Cache public content near users and support configurable origins, cache rules and purge.",
+        "constraints": "At 1M peak requests/s, target <50 ms edge processing p95 for hits and purge active edges within 60 seconds. Protect origins during expiry storms.",
+        "outOfScope": "Shared caching of private or personalized content.",
+        "entities": "Tenant domain, normalized cache key, object metadata, routing policy and purge sequence.",
+        "interfaces": [
+          {
+            "call": "GET https://{customer-domain}/{path}",
+            "purpose": "Serve an eligible cache hit or fetch from origin."
+          },
+          {
+            "call": "POST /purges",
+            "purpose": "Invalidate a URL or tag and return an ID for checking propagation."
+          }
+        ],
+        "baseline": "Steer a request to a healthy edge, build a tenant-aware key from the agreed response variants and serve it from the edge cache when fresh. On miss, collapse matching fetches and use an origin shield.",
+        "deepDives": [
+          {
+            "question": "What happens when a popular object expires everywhere?",
+            "response": "Elect one in-flight fetch per key at each cache tier, protect the origin with a concurrency budget, and serve stale while revalidating only when policy allows."
+          },
+          {
+            "question": "How can an edge that missed purge events rejoin?",
+            "response": "Track purge progress per edge. Replay pending invalidations or reload a safe cache generation before allowing it to serve, and guard against older in-flight fetches repopulating purged objects. Use a short serving lease to take out-of-date edges out of service even when they miss notifications."
+          }
+        ],
+        "verify": "Expire a hot object during origin degradation and reconnect an edge that missed a purge. Check origin load and the last stale response."
+      }
     },
     "distributed-analytics-query": {
       "intro": "Use a coordinator to pin input snapshots and break each SQL query into stages. Workers scan immutable files and exchange intermediate data. A durable query record and an atomic result manifest give callers a clear view of completed work.",
@@ -2708,14 +3551,16 @@
           "name": "Trino",
           "role": "SQL planning and execution.",
           "reason": "Use a Trino coordinator and workers for split planning, distributed joins, aggregation, and task retries with a durable exchange.",
-          "tradeoff": "Task retry has cost and feature tradeoffs. A service wrapper must track query jobs and resubmit safely after coordinator loss."
+          "tradeoff": "Task retry has cost and feature tradeoffs. A service wrapper must track query jobs and resubmit safely after coordinator loss.",
+          "highlight": true
         },
         {
           "id": "files",
           "name": "Apache Iceberg + Amazon S3",
           "role": "Table snapshots, exchange, and result bytes.",
           "reason": "Pin Iceberg snapshots for input tables. Keep columnar data, durable exchange files, and final result pages in S3.",
-          "tradeoff": "Table snapshots are per table unless the catalog provides a shared commit boundary. Durable exchange adds storage requests."
+          "tradeoff": "Table snapshots are per table unless the catalog provides a shared commit boundary. Durable exchange adds storage requests.",
+          "highlight": true
         },
         {
           "id": "jobs",
@@ -2724,7 +3569,39 @@
           "reason": "Store query IDs, idempotency keys, coordinator ownership, and final result manifests in a transactional database.",
           "tradeoff": "Store small metadata here and keep large result pages in S3. Publish only one manifest per successful run."
         }
-      ]
+      ],
+      "interviewAnswer": {
+        "scope": "Accept read-only SQL, execute it across object storage and provide status and paged results.",
+        "constraints": "Support up to 200 admitted queries, target 30-second p95 for approved dashboards and pin a consistent snapshot for each input table.",
+        "outOfScope": "Mutating tables and distributed OLTP transactions.",
+        "entities": "Query ID, execution plan, per-table snapshot ID, task attempt, result manifest and page cursor.",
+        "interfaces": [
+          {
+            "call": "POST /v1/queries",
+            "purpose": "Admit or queue a read-only query and return its ID."
+          },
+          {
+            "call": "GET /v1/queries/{id}",
+            "purpose": "Read the state and resource usage."
+          },
+          {
+            "call": "GET /v1/queries/{id}/results?cursor=",
+            "purpose": "Read completed result pages."
+          }
+        ],
+        "baseline": "Resolve Iceberg snapshot IDs before planning. A Trino coordinator prunes data and divides the plan into stages while workers scan files and exchange data. Publish results from a committed manifest when the query succeeds.",
+        "deepDives": [
+          {
+            "question": "What does snapshot consistency guarantee?",
+            "response": "Each table uses one fixed snapshot even while data arrives. If queries require a coordinated cut across several tables, agree on a catalog-level version or another explicit consistency contract."
+          },
+          {
+            "question": "How does a worker retry avoid duplicate rows?",
+            "response": "Make intermediate and result data attempt-scoped, select a single committed attempt per task and publish results only once the committed outputs are complete."
+          }
+        ],
+        "verify": "Change table files and kill a worker during a join. Compare the final rows to a run over the original snapshot IDs."
+      }
     },
     "experiment-analysis-platform": {
       "intro": "Keep a durable record of assignments and outcomes, then compute each metric from the eligible cohort and a versioned analysis plan. Use streaming for monitoring and a reproducible batch pass for the final result.",
@@ -2845,16 +3722,46 @@
           "name": "Apache Kafka + Amazon S3",
           "role": "Durable intake and replay.",
           "reason": "Buffer tagged events with Kafka and store immutable raw batches in S3 for batch reconciliation.",
-          "tradeoff": "Replayed or delayed events can bias counts unless joined within event-time windows and deduplicated."
+          "tradeoff": "Replayed or delayed events can bias counts unless joined within event-time windows and deduplicated.",
+          "highlight": true
         },
         {
           "id": "compute",
           "name": "Apache Flink + Apache Spark",
           "role": "Provisional and final analysis.",
           "reason": "Join assignment and outcome streams with Flink, then recompute frozen inputs with Spark at finalization.",
-          "tradeoff": "Maintaining two computation paths adds cost. Share metric definitions and reconcile provisional counts with batch results."
+          "tradeoff": "Maintaining two computation paths adds cost. Share metric definitions and reconcile provisional counts with batch results.",
+          "highlight": true
         }
-      ]
+      ],
+      "interviewAnswer": {
+        "scope": "Track assignment, exposure and conversion. Show a provisional result and publish a reproducible final report.",
+        "constraints": "Provisional results are due within 15 minutes. Define treatment of retry, late and missing events over the preset analysis window.",
+        "outOfScope": "Feature delivery, and arbitrary metric changes after an experiment begins.",
+        "entities": "Experiment and metric version, assignment unit, cohort, exposure, outcome event ID, analysis cutoff and report revision.",
+        "interfaces": [
+          {
+            "call": "POST /v1/events",
+            "purpose": "Ingest assignment, exposure or outcome with a stable event ID."
+          },
+          {
+            "call": "GET /v1/experiments/{id}/report",
+            "purpose": "Read provisional or final metrics and data-quality status."
+          }
+        ],
+        "baseline": "Archive raw events and stream them through a deduplication and join pipeline. Assign outcomes to the registered randomization unit. Rebuild the final metrics from archived data under a pinned metric definition and cutoff.",
+        "deepDives": [
+          {
+            "question": "Which users are in the denominator?",
+            "response": "For an intent-to-treat comparison, use randomized units assigned to each group. An exposure-based view can be useful diagnostically, but changing the cohort after assignment can bias the comparison."
+          },
+          {
+            "question": "What if events arrive late or logging differs by group?",
+            "response": "Mark streaming results provisional. Track missing joins and unexpected group proportions, apply a published cutoff, and recompute from the archive. Flag data-quality failures before interpreting an effect."
+          }
+        ],
+        "verify": "Replay a known experiment with duplicate and delayed conversion events, then compare the final result and group counts to a reference computation."
+      }
     },
     "nearby-place-search": {
       "intro": "Use a searchable view of versioned place listings. Route each query to the geographic shards that could hold a match, then filter candidates by actual distance before ranking them.",
@@ -2916,10 +3823,7 @@
           "steps": [
             {
               "name": "Search API",
-              "detail": "Validates coordinates, radius, query, and page size.",
-              "stackIds": [
-                "service"
-              ]
+              "detail": "Validates coordinates, radius, query, and page size."
             },
             {
               "name": "Spatial router",
@@ -2939,7 +3843,6 @@
               "name": "Results coordinator",
               "detail": "Merges scores, checks versions, and returns a page.",
               "stackIds": [
-                "service",
                 "listings"
               ]
             }
@@ -2950,10 +3853,7 @@
           "steps": [
             {
               "name": "Coordinator",
-              "detail": "Retries a timed-out shard on a replica.",
-              "stackIds": [
-                "service"
-              ]
+              "detail": "Retries a timed-out shard on a replica."
             },
             {
               "name": "Deadline check",
@@ -2969,17 +3869,19 @@
       "stack": [
         {
           "id": "service",
-          "name": "Go + H3",
-          "role": "Search API, routing, and result merge.",
-          "reason": "Use a Go coordinator to cover the search circle with intersecting H3 cells, select all relevant regions, and merge results.",
-          "tradeoff": "A cover based on cell centers can miss edge matches. Use a conservative cover and independent distance verification."
+          "name": "H3",
+          "role": "Geographic routing.",
+          "reason": "Use a conservative H3 cell cover to map the query circle to every relevant shard. The search coordinator owns that routing and merges the results.",
+          "tradeoff": "A center-only cover can miss border matches. A wider cover avoids that gap at the cost of more candidates or shard requests.",
+          "highlight": true
         },
         {
           "id": "listings",
           "name": "MySQL (InnoDB)",
           "role": "Authoritative listings and outbox.",
           "reason": "Commit a listing revision and its index event together. Use expected versions to reject stale edits.",
-          "tradeoff": "Authoritative writes are visible before the search projection catches up. Store and serve version information."
+          "tradeoff": "Authoritative writes are visible before the search projection catches up. Store and serve version information.",
+          "highlight": true
         },
         {
           "id": "changes",
@@ -2993,9 +3895,38 @@
           "name": "Elasticsearch",
           "role": "Text and geographic filtering.",
           "reason": "Index text, categories, and geo_point coordinates. Apply a geo_distance filter before ranking candidates.",
-          "tradeoff": "Search refresh and shard moves create a window of staleness. Deduplicate and check versions before returning results."
+          "tradeoff": "Search refresh and shard moves create a window of staleness. Deduplicate and check versions before returning results.",
+          "highlight": true
         }
-      ]
+      ],
+      "interviewAnswer": {
+        "scope": "Find open or closed places within a radius, with optional text or category filters, and let owners edit listings.",
+        "constraints": "Support 50K peak searches/s and p95 under 150 ms for radii up to 10 km. Reflect owner changes within a minute and cover cell and shard boundaries.",
+        "outOfScope": "Navigation, travel-time estimates and personalized ranking.",
+        "entities": "Listing ID, coordinates, name, category, hours and timezone, listing version, and derived search record.",
+        "interfaces": [
+          {
+            "call": "GET /places/search?lat=&lng=&radiusMeters=",
+            "purpose": "Search and rank places with optional text and category filters. Return distance and opening status."
+          },
+          {
+            "call": "PUT /places/{id}",
+            "purpose": "Commit an authorized listing change at the expected version."
+          }
+        ],
+        "baseline": "Write the owner change and outbox event in one MySQL transaction, then project the latest version into Elasticsearch. Cover the search circle with H3 cells, fan out to the relevant shards, filter candidates by radius and merge shard results.",
+        "deepDives": [
+          {
+            "question": "How do you avoid missing listings at a boundary?",
+            "response": "Use a conservative H3 cell cover that includes cells intersecting the circle even when their centers lie outside it. Elasticsearch applies the actual distance test to remove extra candidates. Deduplicate results during shard or listing moves."
+          },
+          {
+            "question": "Why worry about fan-out?",
+            "response": "At 50K queries/s, four shard calls per query would mean 200K shard requests/s before retries. Deduplicate shard routes, use bounded deadlines, and report explicit partial results or fail the query when a required shard times out."
+          }
+        ],
+        "verify": "Compare with a brute-force distance scan around a cell boundary and the antimeridian. Move a listing and measure index lag and whether duplicates appear."
+      }
     }
   },
   "systems": [

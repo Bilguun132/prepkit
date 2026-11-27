@@ -14,7 +14,7 @@ Then open <http://localhost:4173>. The app uses `topics.json` and `content.json`
 
 The algorithm lesson and its visual walkthroughs are local. Coding problems open on LeetCode, where you can practice in your preferred language and use its judge.
 
-System design questions include a discussion guide and a **Show a strong example design** button. The worked example opens with a board showing how requests and data move between components. Technology labels on the board match the example stack below it, which explains each tool’s role and main tradeoff.
+The System design section includes a 45-minute mock interview plan, case prompts, and space to sketch your answer before revealing a worked example. Examples follow the order you would present aloud: scope, data and interfaces, an architecture board, and case-specific deep dives. Each example closes with a way to test the design and links to expandable technology tradeoffs and the full solution.
 
 ## Update the practice content
 
@@ -22,7 +22,8 @@ The daily refresh at 8 AM Singapore time prioritizes the curriculum gap that wou
 
 - In `topics.json`, `featuredTopicId` chooses the coding lesson on Today. For a beginner lesson, add `lesson` with `intuition`, `terms` (pairs of `term` and `definition`), `steps`, and `check` (`question` and `answer`). Pair the lesson with a concrete animated example. Each question can include a `walkthrough` with `input`, `output`, `steps`, `whyItWorks`, `cost`, and `pitfall`. Use official LeetCode links and retain the per-question visual frames.
 - In `content.json`, `featuredSystemId` chooses the system design case on Today. Each worked example in `systemSolutions` has a `board` with one or more flows. A flow has a `title` and ordered `steps`, each with a component `name` and a short `detail`. Use separate flows for distinct paths such as reads and writes.
-- Give each new worked example a `stack` of concrete choices with `id`, `name`, `role`, `reason`, and `tradeoff`. Include the main storage, search, caching, and messaging technologies the design actually needs, and name the implementation of important custom services where it helps explain the design. Use a board step’s `stackIds` array to reference the choices it uses. Keep the roles consistent with the worked solution, including which system owns the data and which systems serve derived copies.
+- Add an `interviewAnswer` to each worked example with `scope`, `constraints`, `outOfScope`, `entities`, `interfaces` (pairs of `call` and `purpose`), `baseline`, `deepDives` (one or two pairs of `question` and `response`), and `verify`. Walk a request through the baseline before exploring how the design handles scale, failure, or correctness. Use estimates when they drive a decision. End with a concrete load or failure test.
+- Give each worked example a `stack` with `id`, `name`, `role`, `reason`, and `tradeoff`. Use a board step’s `stackIds` array to reference the relevant choices. Set `highlight: true` only when the choice’s behavior helps explain a decision on the board. Include languages and implementation frameworks only when the scenario depends on a specific property. Keep authoritative stores and derived views clear throughout the example.
 - Review engineering practice against primary sources daily. Set `trend.reviewed` when the research is complete. Change `trend.updated` only for a substantive update, keep prior briefings in `trendHistory`, and list the supporting `sources` with `title`, `url`, and `note`. Use ISO dates in Singapore time. Keep the existing `sourceTitle`/`sourceUrl` and `readingTitle`/`readingUrl`/`readingSummary` fields synchronized for the Today cards and archive.
 
 If a featured ID is absent, Today uses the most recent library entry.
