@@ -1535,45 +1535,55 @@
     {
       "id": "linked-lists",
       "title": "Linked lists",
-      "subtitle": "Rewire references safely while traversing nodes.",
-      "summary": "Linked-list algorithms depend on preserving the next reference before changing a pointer.",
+      "subtitle": "Follow and change the links between nodes.",
+      "summary": "Follow next from the head to visit nodes. Before replacing a link, keep a reference to the rest of the chain.",
       "principles": [
-        "Keep a previous pointer when reversing links.",
-        "Use fast and slow pointers for cycle or midpoint questions.",
-        "Draw the references before updating them."
+        "A node stores its value and a reference called next. Changing next changes the chain.",
+        "Save the old next before rewriting it if you still need to visit that part of the chain.",
+        "Compare node identity when detecting cycles. Distinct nodes can store the same value."
       ],
       "conceptFrames": {
         "items": [
-          1,
-          2,
-          3,
-          4
+          "A · 7",
+          "B · 2",
+          "C · 9",
+          "X · 5"
         ],
         "frames": [
           {
             "active": [
-              0
-            ],
-            "caption": "Observe the current state: 4.",
-            "state": 4
-          },
-          {
-            "active": [
-              0,
-              1
-            ],
-            "caption": "Apply the pattern and update the stored state: 3.",
-            "state": 3
-          },
-          {
-            "active": [
               0,
               1,
-              2,
+              2
+            ],
+            "state": "Head: A → B → C → None",
+            "caption": "The letters identify nodes. Starting at A, follow A.next to B, then B.next to C."
+          },
+          {
+            "active": [
+              0,
               3
             ],
-            "caption": "The invariant leads to the result: 1.",
-            "state": 1
+            "state": "Head: A → B → C → None. X → None",
+            "caption": "Insert X after A. Before you touch A.next, identify the reference to B that you still need."
+          },
+          {
+            "active": [
+              3,
+              1
+            ],
+            "state": "Head: A → B → C → None. X → B",
+            "caption": "Assign X.next = A.next. X now points to B, so the rest of the chain will stay reachable."
+          },
+          {
+            "active": [
+              0,
+              3,
+              1,
+              2
+            ],
+            "state": "Head: A → X → B → C → None",
+            "caption": "Assign A.next = X. Follow the new arrows from head. Only two links changed."
           }
         ]
       },
@@ -1584,37 +1594,75 @@
           "number": 206,
           "url": "https://leetcode.com/problems/reverse-linked-list/",
           "prompt": "Reverse a singly linked list.",
-          "why": "Save next, point current to previous, then advance both references.",
+          "why": "Keep one reversed chain and one unvisited chain. Save the link to the unvisited chain before turning each arrow around.",
           "visual": {
             "items": [
-              1,
-              2,
-              3,
-              4
+              "A · 4",
+              "B · 7",
+              "C · 2"
             ],
             "frames": [
               {
                 "active": [
                   0
                 ],
-                "caption": "Identify the state relevant to Reverse Linked List.",
-                "state": 4
+                "state": "prev: None. curr: A → B → C → None",
+                "caption": "L marks prev when it points to a node. R marks curr. Start with no reversed nodes.",
+                "right": 0
               },
               {
                 "active": [
+                  0,
                   1
                 ],
-                "caption": "Save next, point current to previous, then advance both references.",
-                "state": 3
+                "state": "saved: B. curr: A → B → C → None",
+                "caption": "Read A.next and keep a separate reference to B before reassigning A.next.",
+                "right": 0
               },
               {
                 "active": [
+                  0,
+                  1
+                ],
+                "state": "prev: A → None. curr: B → C → None",
+                "caption": "Point A.next at None. Move prev to A and curr to the saved B.",
+                "left": 0,
+                "right": 1
+              },
+              {
+                "active": [
+                  1,
                   2
                 ],
-                "caption": "Apply the same invariant to complete Reverse Linked List.",
-                "state": 1
+                "state": "prev: B → A → None. curr: C → None",
+                "caption": "Save C, then point B.next back to A. Advance both references.",
+                "left": 1,
+                "right": 2
+              },
+              {
+                "active": [
+                  0,
+                  1,
+                  2
+                ],
+                "state": "prev: C → B → A → None. curr: None",
+                "caption": "Save None and point C.next back to B. With no unvisited nodes left, return C.",
+                "left": 2
               }
             ]
+          },
+          "walkthrough": {
+            "input": "A(4) → B(7) → C(2) → None.",
+            "output": "C(2) → B(7) → A(4) → None. Return C as the new head.",
+            "steps": [
+              "Start with prev = None and curr = A. prev will lead to the already reversed nodes.",
+              "Save B from A.next. Set A.next to None, then move prev to A and curr to the saved B.",
+              "Save C from B.next. Set B.next to A, then move prev to B and curr to C.",
+              "Save None from C.next. Set C.next to B, then move prev to C and curr to None. Return prev."
+            ],
+            "whyItWorks": "At the start of each iteration, prev points to the reversed portion and curr points to the untouched portion. Saving curr.next preserves access to the untouched nodes when you change the arrow.",
+            "cost": "O(n) time for n nodes and O(1) extra space. Three references are enough.",
+            "pitfall": "If you set curr.next = prev before saving next, you lose your route to the original successor. Return prev when curr reaches None."
           }
         },
         {
@@ -1623,37 +1671,75 @@
           "number": 21,
           "url": "https://leetcode.com/problems/merge-two-sorted-lists/",
           "prompt": "Merge two sorted linked lists.",
-          "why": "Attach the smaller head each time and advance only that list.",
+          "why": "Compare the first unmerged node of each list. The smaller one belongs next because the lists are already sorted.",
           "visual": {
             "items": [
-              1,
-              2,
-              3,
-              4
+              "A1 · 1",
+              "A2 · 4",
+              "B1 · 2",
+              "B2 · 3"
             ],
             "frames": [
               {
                 "active": [
-                  0
+                  0,
+                  2
                 ],
-                "caption": "Identify the state relevant to Merge Two Sorted Lists.",
-                "state": 4
+                "state": "Chosen: empty. Heads: A1 = 1, B1 = 2",
+                "caption": "L marks the current head of list A. R marks the current head of list B. Compare their values.",
+                "left": 0,
+                "right": 2
               },
               {
                 "active": [
-                  1
+                  0
                 ],
-                "caption": "Attach the smaller head each time and advance only that list.",
-                "state": 3
+                "state": "Chosen: 1. Heads: A2 = 4, B1 = 2",
+                "caption": "Attach A1 and advance only A. A2 is now the first unmerged node in that list.",
+                "left": 1,
+                "right": 2
               },
               {
                 "active": [
                   2
                 ],
-                "caption": "Apply the same invariant to complete Merge Two Sorted Lists.",
-                "state": 1
+                "state": "Chosen: 1 → 2. Heads: A2 = 4, B2 = 3",
+                "caption": "Attach B1 and advance only B.",
+                "left": 1,
+                "right": 3
+              },
+              {
+                "active": [
+                  3
+                ],
+                "state": "Chosen: 1 → 2 → 3. Heads: A2 = 4, B = None",
+                "caption": "Attach B2. List B is now exhausted.",
+                "left": 1
+              },
+              {
+                "active": [
+                  0,
+                  2,
+                  3,
+                  1
+                ],
+                "state": "Result: 1 → 2 → 3 → 4 → None",
+                "caption": "Attach A’s remaining chain. Return the node after the placeholder."
               }
             ]
+          },
+          "walkthrough": {
+            "input": "A: 1 → 4 → None. B: 2 → 3 → None.",
+            "output": "1 → 2 → 3 → 4 → None.",
+            "steps": [
+              "Start with a temporary placeholder node called dummy. A reference called tail tracks where the next result node goes.",
+              "Compare 1 and 2. Attach 1 to tail.next, move tail to 1, and advance only A to 4.",
+              "Compare 4 and 2, then 4 and 3. Attach 2, then 3, advancing only B each time.",
+              "When B reaches None, attach A’s remaining chain after tail. Return dummy.next."
+            ],
+            "whyItWorks": "Each list’s first unmerged node is its smallest remaining value. The smaller of the two is therefore the smallest across both lists.",
+            "cost": "O(m + n) time for lists of lengths m and n. Reusing the original nodes takes O(1) extra space.",
+            "pitfall": "Advance only the list you attached from. When the other list empties, link the entire remaining chain. The placeholder stays out of the result."
           }
         },
         {
@@ -1662,40 +1748,101 @@
           "number": 141,
           "url": "https://leetcode.com/problems/linked-list-cycle/",
           "prompt": "Determine whether a list loops back to an earlier node.",
-          "why": "A fast pointer gains one node per step on a slow pointer inside a cycle.",
+          "why": "Move one reference one link at a time and another two links at a time. Inside a loop, the faster reference eventually catches the slower one.",
           "visual": {
             "items": [
-              1,
-              2,
-              3,
-              4
+              "A · 3",
+              "B · 2",
+              "C · 0",
+              "D · 2"
             ],
             "frames": [
               {
                 "active": [
                   0
                 ],
-                "caption": "Identify the state relevant to Linked List Cycle.",
-                "state": 4
+                "state": "A → B → C → D ↩ B. slow: A, fast: A",
+                "caption": "L marks slow. R marks fast. Begin at the same head, then compare after the first move.",
+                "left": 0,
+                "right": 0
               },
               {
                 "active": [
-                  1
-                ],
-                "caption": "A fast pointer gains one node per step on a slow pointer inside a cycle.",
-                "state": 3
-              },
-              {
-                "active": [
+                  1,
                   2
                 ],
-                "caption": "Apply the same invariant to complete Linked List Cycle.",
-                "state": 1
+                "state": "slow: B, fast: C",
+                "caption": "Slow follows A → B. Fast follows A → B → C.",
+                "left": 1,
+                "right": 2
+              },
+              {
+                "active": [
+                  2,
+                  1
+                ],
+                "state": "slow: C, fast: B",
+                "caption": "Slow goes from B to C. Fast follows C → D → B, using the link that closes the loop.",
+                "left": 2,
+                "right": 1
+              },
+              {
+                "active": [
+                  3
+                ],
+                "state": "slow: D, fast: D. Result: true",
+                "caption": "Slow goes from C to D. Fast follows B → C → D. Both references now point to D.",
+                "left": 3,
+                "right": 3
               }
             ]
+          },
+          "walkthrough": {
+            "input": "A(3) → B(2) → C(0) → D(2), with D.next pointing back to B.",
+            "output": "True. Both references reach D on their third step.",
+            "steps": [
+              "Start slow and fast at A. Compare after advancing, since both start on the head.",
+              "Move slow one link to B and fast two links to C.",
+              "Move slow to C and fast from C through D to B.",
+              "Move slow to D and fast from B through C to D. They refer to the same node. Return True."
+            ],
+            "whyItWorks": "If the chain ends, fast reaches None or has no next node. Inside a cycle, fast gains one position per step relative to slow, so they must meet.",
+            "cost": "O(n) time for n reachable nodes and O(1) extra space.",
+            "pitfall": "Use slow is fast in Python, since B and D both store 2. Check fast and fast.next before following two links."
           }
         }
-      ]
+      ],
+      "lesson": {
+        "intuition": "Picture a trail of cards. Each card says which card to visit next. You start at the head, then follow the arrows. To get to the fourth card, follow three arrows. If you already have a card, inserting a new one after it only takes a couple of link changes.",
+        "terms": [
+          {
+            "term": "Node",
+            "definition": "One card. It stores a value and a next reference."
+          },
+          {
+            "term": "Head",
+            "definition": "A reference to the first node. An empty list has head = None in Python."
+          },
+          {
+            "term": "Next reference",
+            "definition": "A link to the next node. In a list that ends, the last node has next = None."
+          },
+          {
+            "term": "Node identity",
+            "definition": "Which actual node a reference points to. In Python, slow is fast tests whether both refer to the same node."
+          }
+        ],
+        "steps": [
+          "Draw each node as a box with an arrow for next. Give boxes distinct labels even if their values are equal.",
+          "Start at head and follow current.next to visit the next node. Check for None before reading a node’s fields.",
+          "Before changing current.next, save the old reference or connect your new node to it. The example inserts X between A and B by setting X.next to B first.",
+          "Look at the new arrows from head. Check empty lists, one-node lists and repeated values where relevant."
+        ],
+        "check": {
+          "question": "A → B → C. You want to insert X after A. You set A.next = X while X.next is None. If head is your only reference, which nodes can you now reach?",
+          "answer": "Only A and X. Save B first, or set X.next = A.next before setting A.next = X. Then you can follow A → X → B → C."
+        }
+      }
     },
     {
       "id": "trees",
@@ -5692,5 +5839,5 @@
       }
     }
   ],
-  "featuredTopicId": "stack"
+  "featuredTopicId": "linked-lists"
 }

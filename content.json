@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-11-27T23:23:52+08:00",
+  "lastUpdated": "2026-11-28T08:01:45+08:00",
   "systemSolutions": {
     "rate-limiter": {
       "intro": "A strong design makes the policy explicit, enforces it near the request path, and chooses a clear consistency tradeoff.",
@@ -3927,6 +3927,165 @@
         ],
         "verify": "Compare with a brute-force distance scan around a cell boundary and the antimeridian. Move a listing and measure index lag and whether duplicates appear."
       }
+    },
+    "live-sports-scores": {
+      "intro": "Store one authoritative versioned score and play-by-play per match. Distribute committed updates to regional streaming gateways. A reconnecting client resumes using the last version it applied.",
+      "sections": [
+        {
+          "title": "Requirements and scale",
+          "body": "Assume one authoritative feed per match that supplies stable message IDs, an ordered feed position and a replay API. Cover current scores, play-by-play, explicit corrections, and reconnect replay for at least five minutes. Measure the display target from platform acceptance to a healthy connected browser. Track source-to-platform lag separately. At one update every two seconds for a headline match, 600,000 viewers require about 300,000 deliveries per second. A 200-byte message would cost roughly 60 MB/s of combined payload egress before protocol overhead. This workload needs many regional connections even when ingest is light."
+        },
+        {
+          "title": "Data and correction semantics",
+          "body": "Use distinct IDs for the source message and the play it describes. A transaction locks the match row, records the source message under a unique key, applies its changes to the canonical play timeline and score, and inserts a replay record and outbox entry under the next local match version. If an earlier goal is overturned, the correction references that play ID, changes the displayed score, and advances the version. Where the feed sends deltas, buffer briefly on a source sequence gap and use the feed’s replay API to repair the gap before applying later dependent updates. Expose last confirmed state and freshness during a prolonged outage."
+        },
+        {
+          "title": "Publish and fan out",
+          "body": "Have an outbox relay publish by match ID to Kafka. Order each match’s outbound messages by its local version, and handle replay and republication by version. A regional fan-out service consumes each match’s updates once per region, then forwards only to gateways with subscribers. Gateways multiplex the match stream onto local Server-Sent Events connections. Include complete compact score and status in each update with the changed play, and keep the durable timeline separate from these streamed messages. Limit each client queue and close a stalled connection so the browser can resume. Monitor regional fan-out lag and active sockets independently from feed lag."
+        },
+        {
+          "title": "Reconnect without a snapshot-to-stream gap",
+          "body": "The scoreboard snapshot includes a match version. The SSE connection starts after that version and uses match version as the event ID. Apply updates synchronously in the event handler so the browser cursor tracks the visible state. On automatic reconnect, prefer Last-Event-ID over the initial after parameter and validate it for that match. Subscribe to the regional stream and buffer live updates while reading the committed replay journal up to a consistent version. Send replay records in order, discard buffered versions already sent, and continue with the next buffered version. If there is a gap, fill it from the journal before sending later versions. If the cursor is too old or replay is too large, send an explicit reset and fetch a fresh versioned score and timeline. The client ignores duplicate or older versions and presents corrections as new updates. During a regional reconnect surge, reuse retained journal pages in regional caches with the version range as the cache key. Keep the authoritative journal as the recovery path."
+        },
+        {
+          "title": "Tradeoffs and verification",
+          "body": "Use Server-Sent Events because browsers mainly receive one-way text updates and can reconnect with a cursor. Choose WebSockets if the same channel must carry frequent client messages. A bulk scorecard or long timeline can use cached snapshots, which must state their version and freshness. Keep dynamic stream endpoints unbuffered. Simulate a correction racing a disconnect, duplicate outbox deliveries, a missed publisher acknowledgement and a regional gateway failure. Assert that resumed browsers receive a contiguous sequence or reset to a fresh snapshot. Track p95 update-to-display lag, replay and reset rates, open connections, stale score duration, and journal retention."
+        }
+      ],
+      "board": [
+        {
+          "title": "Accept a play or correction",
+          "steps": [
+            {
+              "name": "Official feed",
+              "detail": "Sends an event with a message ID and feed position."
+            },
+            {
+              "name": "Match updater",
+              "detail": "Deduplicates the message and checks for a sequence gap."
+            },
+            {
+              "name": "Match store and outbox",
+              "detail": "Commit the score, timeline change, and replay entry at one version.",
+              "stackIds": [
+                "match-store"
+              ]
+            },
+            {
+              "name": "Event stream",
+              "detail": "Publishes committed updates by match ID.",
+              "stackIds": [
+                "delivery-log"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Deliver a live score",
+          "steps": [
+            {
+              "name": "Regional fan-out",
+              "detail": "Forwards one copy to each gateway with subscribers."
+            },
+            {
+              "name": "Streaming gateway",
+              "detail": "Sends versioned updates on open connections.",
+              "stackIds": [
+                "live-stream"
+              ]
+            },
+            {
+              "name": "Browser",
+              "detail": "Applies the next version and marks corrections."
+            }
+          ]
+        },
+        {
+          "title": "Catch up a reconnecting viewer",
+          "steps": [
+            {
+              "name": "Browser",
+              "detail": "Sends its last event ID for this match.",
+              "stackIds": [
+                "live-stream"
+              ]
+            },
+            {
+              "name": "Streaming gateway",
+              "detail": "Buffers new events while it requests replay."
+            },
+            {
+              "name": "Replay journal",
+              "detail": "Returns missed versions up to a consistent cutoff.",
+              "stackIds": [
+                "match-store"
+              ]
+            },
+            {
+              "name": "Streaming gateway",
+              "detail": "Drains newer events in order or requests a fresh snapshot."
+            }
+          ]
+        }
+      ],
+      "stack": [
+        {
+          "id": "match-store",
+          "name": "PostgreSQL",
+          "role": "Authoritative match state and journal.",
+          "reason": "A row lock and a unique source message key allow each match to commit one monotonic change at a time with its outbox record.",
+          "tradeoff": "Writes to one match serialize. Keep transactions small and move viewer traffic to regional fan-out.",
+          "highlight": true
+        },
+        {
+          "id": "delivery-log",
+          "name": "Apache Kafka",
+          "role": "Replicated distribution log.",
+          "reason": "Key each update by match ID so regional consumers can process that match through one ordered partition.",
+          "tradeoff": "The relay must publish each match in version order. Application consumers still deduplicate repeated outbox messages.",
+          "highlight": true
+        },
+        {
+          "id": "live-stream",
+          "name": "Server-Sent Events",
+          "role": "One-way updates to browsers.",
+          "reason": "EventSource can reconnect and send its last event ID. The server uses that version to find missed match updates.",
+          "tradeoff": "The browser manages reconnection, while buffering, replay, and connection limits are application responsibilities.",
+          "highlight": true
+        }
+      ],
+      "interviewAnswer": {
+        "scope": "Read the current score and timeline, subscribe for updates, and apply official corrections.",
+        "constraints": "A hot match has 600,000 viewers. Target p95 of two seconds from acceptance to display and replay at least five minutes of recent updates.",
+        "outOfScope": "Video, betting, and taking over scorekeeping from the official provider.",
+        "entities": "Match, source message ID and position, play ID, local match version, snapshot, and replay record.",
+        "interfaces": [
+          {
+            "call": "GET /matches/{id}",
+            "purpose": "Read a score and timeline tied to a match version."
+          },
+          {
+            "call": "GET /matches/{id}/live?after=",
+            "purpose": "Stream live updates. Use the last event ID on reconnect."
+          },
+          {
+            "call": "ingest(matchId, messageId, position, update)",
+            "purpose": "Apply an official play or correction and record its replay version."
+          }
+        ],
+        "baseline": "Commit updates, score changes, and an outbox record together in PostgreSQL. Relay committed events through Kafka by match ID. Regional gateways fan them out over Server-Sent Events.",
+        "deepDives": [
+          {
+            "question": "What happens when a fan disconnects just before a goal is overturned?",
+            "response": "Treat the correction as a higher match version even if it lowers the score. Buffer new live events while replaying the committed versions after the browser’s cursor, then send the remaining live events. Reset to a fresh snapshot when replay expires."
+          },
+          {
+            "question": "What will saturate first in a popular match?",
+            "response": "At one update every two seconds, 600,000 viewers need about 300,000 client deliveries per second. Keep one canonical writer per match and distribute the same update through regional gateways. Bound per-client queues so stalled browsers reconnect without blocking others."
+          }
+        ],
+        "verify": "Replay a match with a late correction and duplicate deliveries while dropping browser and gateway connections. Check that viewers recover without stale scores overwriting newer ones, and measure p95 display lag at peak fan-out."
+      }
     }
   },
   "systems": [
@@ -4356,48 +4515,99 @@
         "Trace a search crossing the antimeridian or a shard boundary. State why candidate routing and precise distance are separate checks.",
         "Discuss stale index entries, partial results, hot neighborhoods, cursor consistency, and the limits of query caching."
       ]
+    },
+    {
+      "id": "live-sports-scores",
+      "title": "Design a live sports score service",
+      "topic": "Real-time fan-out and corrections",
+      "tag": "Advanced",
+      "scenario": "Build a live scoreboard for match scores, status, and play-by-play. An official feed sends updates and sometimes corrects a prior play, such as reversing a goal. A popular match can draw 600,000 viewers at once. Aim to show an accepted update to connected viewers within two seconds at p95. After a brief disconnect, viewers should catch up without a score rolling back to an older version. Distinguish an official correction, which can lower a score, from a stale delivery.",
+      "guide": [
+        "Clarify who can change a score, what counts as live, and how long you need to replay missed updates.",
+        "Trace an official goal and a later correction from ingest to the browser. Which IDs identify the play versus the update?",
+        "Explain how the browser resumes while new updates are still arriving.",
+        "Size a popular match’s fan-out and explain how slow connections affect other viewers."
+      ]
     }
   ],
   "trend": {
-    "title": "Calibrate offline agent scores against what users experience",
-    "intro": "Offline evaluations can catch regressions before users see a change. To use a score for release decisions, first learn how well it predicts the outcome you care about in production. For a support agent, compare changes in offline task success with changes in correctly resolved cases.",
+    "title": "Test agent-facing API and tool changes with matched runs",
+    "intro": "A change to a tool schema, error message or help text can change whether an agent completes a task. Give the same task to the same agent under two versions of that interface, and verify the result in the system the agent uses.",
     "points": [
       {
-        "title": "Pair comparable offline and online results",
-        "text": "For past prompt changes, log the offline score change and the measured A/B effect on a chosen outcome. Analyze prompt edits separately from model or tool changes if those change how the score relates to the outcome."
+        "title": "Choose a task that exposes the interface",
+        "text": "Pick a representative goal, such as connecting two shapes in a diagram. Verify that the saved arrow actually points to both shape IDs and follows them when a shape moves. A screenshot can miss that failure."
       },
       {
-        "title": "Use scores to decide which changes need an experiment",
-        "text": "While you are still learning the relationship, use an offline score to catch clear breakage and require an online test for meaningful rollout decisions. After local validation, use the estimated uncertainty to decide which low-risk changes a score can support and which still need an A/B test."
+        "title": "Vary one part of the interface per comparison",
+        "text": "Run the same tasks against old and new tool schemas with the same model, prompt, starting data and grading rules. Repeat each condition and compare results by task. A stricter grader is a separate change and can alter the score even when the agent stays the same."
       },
       {
-        "title": "Audit after adopting a faster release path",
-        "text": "Randomly send some changes from the faster path through a normal experiment. Compare observed outcomes with what the offline scores predicted. Recalibrate after a change in model, judge, or traffic mix, especially when a judge might favor one model’s answers."
+        "title": "Use the failed steps to improve the contract",
+        "text": "Read traces for tasks that still fail. If agents repeatedly create arrows that look connected but detach during an edit, take shape IDs as tool inputs and let the application create the binding. Add the failing case as a regression check."
       }
     ],
-    "sourceTitle": "Spotify Engineering · When Can You Ship on Offline Evals Alone?",
-    "sourceUrl": "https://engineering.atspotify.com/2026/11/when-can-you-ship-on-offline-evals-alone",
-    "readingTitle": "Anthropic · Demystifying evals for AI agents",
-    "readingUrl": "https://www.anthropic.com/research/demystifying-evals-for-ai-agents",
-    "readingSummary": "Describes using offline evaluations alongside production monitoring, user feedback, and manual transcript review.",
+    "sourceTitle": "Together AI · Introducing Hurdle",
+    "sourceUrl": "https://www.together.ai/blog/introducing-hurdle-run-agent-evals-on-your-api-skills-and-docs",
+    "readingTitle": "Pouria Jahandideh · Scoring a diagram agent’s saved state",
+    "readingUrl": "https://pjsofts.github.io/blog/diagram-agent-eval-baseline/",
+    "readingSummary": "A November 27 workshop write-up shows how structural checks exposed disconnected diagram elements. Its tool revision also changed the prompt, so the observed score gain does not isolate the schema’s effect.",
     "sources": [
       {
-        "title": "Spotify Engineering · When Can You Ship on Offline Evals Alone?",
-        "url": "https://engineering.atspotify.com/2026/11/when-can-you-ship-on-offline-evals-alone",
-        "note": "The authors derive a release decision rule under specific assumptions and propose randomized audits to detect when offline scores stop predicting online effects."
+        "title": "Together AI · Introducing Hurdle (November 25)",
+        "url": "https://www.together.ai/blog/introducing-hurdle-run-agent-evals-on-your-api-skills-and-docs",
+        "note": "Describes repeating the same agent tasks under different interface conditions and grading observable API activity and artifacts."
       },
       {
-        "title": "Anthropic · Demystifying evals for AI agents",
-        "url": "https://www.anthropic.com/research/demystifying-evals-for-ai-agents",
-        "note": "Describes using offline evaluations alongside production monitoring, user feedback, and manual transcript review."
+        "title": "Pouria Jahandideh · Diagram-agent evaluation (November 27)",
+        "url": "https://pjsofts.github.io/blog/diagram-agent-eval-baseline/",
+        "note": "Reports structural checks, a tool schema that accepts shape references, and saved results for 14 workshop tasks. Multiple changes were made between the comparison runs."
       }
     ],
-    "reviewSummary": "Across the production sources reviewed, Spotify’s analysis adds a release practice to the evaluation advice in the archive. It distinguishes catching a regression offline from predicting an effect on users. Its decision rule depends on comparable historical changes, noisy measurements, and a stable relationship between offline and online outcomes. Teams need their own paired data and audits before using it.",
-    "reviewed": "2026-11-27",
-    "updated": "2026-11-27"
+    "reviewSummary": "The November 27 case study and Hurdle release add a practical test for agent-facing interfaces. Use fixed grading and change one tool or documentation condition at a time. The small workshop demonstrates a failure mode; each team needs its own matched runs to measure whether an interface change helps.",
+    "reviewed": "2026-11-28",
+    "updated": "2026-11-28"
   },
-  "featuredSystemId": "nearby-place-search",
+  "featuredSystemId": "live-sports-scores",
   "trendHistory": [
+    {
+      "title": "Calibrate offline agent scores against what users experience",
+      "intro": "Offline evaluations can catch regressions before users see a change. To use a score for release decisions, first learn how well it predicts the outcome you care about in production. For a support agent, compare changes in offline task success with changes in correctly resolved cases.",
+      "points": [
+        {
+          "title": "Pair comparable offline and online results",
+          "text": "For past prompt changes, log the offline score change and the measured A/B effect on a chosen outcome. Analyze prompt edits separately from model or tool changes if those change how the score relates to the outcome."
+        },
+        {
+          "title": "Use scores to decide which changes need an experiment",
+          "text": "While you are still learning the relationship, use an offline score to catch clear breakage and require an online test for meaningful rollout decisions. After local validation, use the estimated uncertainty to decide which low-risk changes a score can support and which still need an A/B test."
+        },
+        {
+          "title": "Audit after adopting a faster release path",
+          "text": "Randomly send some changes from the faster path through a normal experiment. Compare observed outcomes with what the offline scores predicted. Recalibrate after a change in model, judge, or traffic mix, especially when a judge might favor one model’s answers."
+        }
+      ],
+      "sourceTitle": "Spotify Engineering · When Can You Ship on Offline Evals Alone?",
+      "sourceUrl": "https://engineering.atspotify.com/2026/11/when-can-you-ship-on-offline-evals-alone",
+      "readingTitle": "Anthropic · Demystifying evals for AI agents",
+      "readingUrl": "https://www.anthropic.com/research/demystifying-evals-for-ai-agents",
+      "readingSummary": "Describes using offline evaluations alongside production monitoring, user feedback, and manual transcript review.",
+      "sources": [
+        {
+          "title": "Spotify Engineering · When Can You Ship on Offline Evals Alone?",
+          "url": "https://engineering.atspotify.com/2026/11/when-can-you-ship-on-offline-evals-alone",
+          "note": "The authors derive a release decision rule under specific assumptions and propose randomized audits to detect when offline scores stop predicting online effects."
+        },
+        {
+          "title": "Anthropic · Demystifying evals for AI agents",
+          "url": "https://www.anthropic.com/research/demystifying-evals-for-ai-agents",
+          "note": "Describes using offline evaluations alongside production monitoring, user feedback, and manual transcript review."
+        }
+      ],
+      "reviewSummary": "Across the production sources reviewed, Spotify’s analysis adds a release practice to the evaluation advice in the archive. It distinguishes catching a regression offline from predicting an effect on users. Its decision rule depends on comparable historical changes, noisy measurements, and a stable relationship between offline and online outcomes. Teams need their own paired data and audits before using it.",
+      "reviewed": "2026-11-27",
+      "updated": "2026-11-27"
+    },
     {
       "title": "Let agents investigate incidents with read-only access",
       "intro": "Use an agent to assemble incident evidence and prepare a handoff for the on-call engineer. For example, it can compare when checkout errors started with when a deployment rolled out and show the traces behind its hypothesis. The incident process still owns the change decision.",
